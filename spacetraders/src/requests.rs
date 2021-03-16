@@ -6,7 +6,7 @@ pub struct PurchaseOrderRequest {
     #[serde(rename(serialize = "shipId"))]
     pub ship_id: String,
     pub good: shared::Good,
-    pub quantity: u32,
+    pub quantity: i32,
 }
 
 #[derive(Serialize, Debug)]
@@ -27,4 +27,12 @@ pub struct FlightPlanRequest {
     #[serde(rename(serialize = "shipId"))]
     pub ship_id: String,
     pub destination: String,
+}
+
+#[derive(Serialize, Debug)]
+pub struct SellOrderRequest {
+    #[serde(rename(serialize = "shipId"))]
+    pub ship_id: String,
+    pub good: shared::Good,
+    pub quantity: i32,
 }

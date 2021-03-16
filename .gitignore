@@ -1,2 +1,4 @@
+.env
 .idea
 /target
+/k8s/secrets.yaml

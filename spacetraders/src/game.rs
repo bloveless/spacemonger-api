@@ -8,7 +8,7 @@ use serde::Deserialize;
 pub struct Game {
     client: Client,
     username: String,
-    token: String,
+    // token: String,
 }
 
 #[derive(Debug)]
@@ -38,7 +38,7 @@ impl Game {
         Game {
             client,
             username,
-            token,
+            // token,
         }
     }
 
@@ -46,17 +46,24 @@ impl Game {
         match serde_json::from_str::<T>(&response_text) {
             Ok(o) => Ok(o),
             Err(e) => {
-                println!("Error processing response: {}", e);
+                println!("Error processing: {}", e);
+                println!("Error response: {}", &response_text);
 
                 match serde_json::from_str::<shared::ErrorMessage>(&response_text) {
                     Ok(error_message) => Err(Box::new(error_message)),
                     Err(e) => Err(Box::new(e)),
                 }
-            },
+            }
         }
     }
 
-    // TODO: Get flight plan
+    pub async fn get_flight_plan(&self, flight_plan_id: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
+        let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, flight_plan_id))
+            .send().await?
+            .text().await?;
+
+        self.parse_response::<responses::FlightPlan>(&response_text)
+    }
 
     pub async fn create_flight_plan(&self, ship_id: String, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
         let flight_plan_request = requests::FlightPlanRequest {
@@ -88,7 +95,13 @@ impl Game {
         self.parse_response::<responses::AvailableLoans>(&response_text)
     }
 
-    // TODO: Get your loans
+    pub async fn get_your_loans(&self) -> Result<responses::LoanInfo, Box<dyn std::error::Error>> {
+        let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}/loans", self.username))
+            .send().await?
+            .text().await?;
+
+        self.parse_response::<responses::LoanInfo>(&response_text)
+    }
 
     pub async fn request_new_loan(&self, loan_type: shared::LoanType) -> Result<responses::UserInfo, Box<dyn std::error::Error>> {
         let request_new_loan_request = requests::RequestNewLoanRequest {
@@ -120,11 +133,17 @@ impl Game {
         self.parse_response::<responses::AvailableLocations>(&response_text)
     }
 
-    // TODO: Get info on a locations marketplace
+    pub async fn get_location_marketplace(&self, location: String) -> Result<responses::PlanetMarketplace, Box<dyn std::error::Error>> {
+        let response_text = self.client.get(&format!("https://api.spacetraders.io/game/locations/{}/marketplace", location))
+            .send().await?
+            .text().await?;
 
-    pub async fn create_purchase_order(&self, ship_id: String, good: shared::Good, quantity: u32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
+        self.parse_response::<responses::PlanetMarketplace>(&response_text)
+    }
+
+    pub async fn create_purchase_order(&self, ship: shared::Ship, good: shared::Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
         let purchase_order_request = requests::PurchaseOrderRequest {
-            ship_id,
+            ship_id: ship.id.to_owned(),
             good,
             quantity,
         };
@@ -137,7 +156,20 @@ impl Game {
         self.parse_response::<responses::PurchaseOrder>(&response_text)
     }
 
-    // TODO: Place a new sell order
+    pub async fn create_sell_order(&self, ship_id: String, good: shared::Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
+        let sell_order_request = requests::SellOrderRequest {
+            ship_id,
+            good,
+            quantity,
+        };
+
+        let response_text = self.client.post(&format!("https://api.spacetraders.io/users/{}/sell-orders", self.username))
+            .json(&sell_order_request)
+            .send().await?
+            .text().await?;
+
+        self.parse_response::<responses::PurchaseOrder>(&response_text)
+    }
 
     pub async fn purchase_ship(&self, location: String, ship_type: String) -> Result<responses::UserInfo, Box<dyn std::error::Error>> {
         let purchase_ship_request = requests::PurchaseShipRequest {
@@ -153,9 +185,8 @@ impl Game {
         self.parse_response::<responses::UserInfo>(&response_text)
     }
 
-    pub async fn get_ships_for_sale(&self, class: String) -> Result<responses::ShipsForSale, Box<dyn std::error::Error>> {
+    pub async fn get_ships_for_sale(&self) -> Result<responses::ShipsForSale, Box<dyn std::error::Error>> {
         let response_text = self.client.get("https://api.spacetraders.io/game/ships")
-            .query(&[("class", class)])
             .send().await?
             .text().await?;
 
@@ -178,7 +209,7 @@ impl Game {
         self.parse_response::<responses::SystemsInfo>(&response_text)
     }
 
-    pub async fn claim_username_get_token(&self, username: String) -> Result<responses::ClaimUsernameResponse, Box<dyn std::error::Error>> {
+    pub async fn claim_username_get_token(&self) -> Result<responses::ClaimUsernameResponse, Box<dyn std::error::Error>> {
         let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}/token", self.username).to_string())
             .send().await?
             .text().await?;

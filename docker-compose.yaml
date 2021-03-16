@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  spacetraders:
+    image: bloveless/spacetraders:0.1.0-alpha.3
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    env_file:
+      - ./.env
+    command:
+      - watch
+      - scan-system
+
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: spacetraders
+      POSTGRES_DB: spacetraders
+      POSTGRES_PASSWORD: 2djlsUYwcF0YzSgvTZPc9BCWff
+    ports:
+      - 5432:5432
+    volumes:
+    - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:
