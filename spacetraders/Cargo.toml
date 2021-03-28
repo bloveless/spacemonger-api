@@ -1,6 +1,6 @@
 [package]
 name = "spacetraders"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 authors = ["Brennon Loveless <brennon.loveless@gmail.com>"]
 edition = "2018"
 license-file = "LICENSE.md"
@@ -8,7 +8,7 @@ readme = "README.md"
 keywords = ["spacetraders"]
 categories = ["api-bindings"]
 description = "An API wrapper for https://spacetraders.io"
-homepage = "https://github.com/bloveless/spacetraders-rs"
+homepage = "https://github.com/bloveless/spacetraders-rs/tree/main/spacetraders"
 repository = "https://github.com/bloveless/spacetraders-rs"
 documentation = "https://docs.rs/spacetraders"
 
