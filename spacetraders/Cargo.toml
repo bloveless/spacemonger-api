@@ -8,8 +8,9 @@ readme = "README.md"
 keywords = ["spacetraders"]
 categories = ["api-bindings"]
 description = "An API wrapper for https://spacetraders.io"
-homepage = "https://github.com/bloveless/spacetraders-rs/tree/main/spacetraders"
+homepage = "https://github.com/bloveless/spacetraders-rs"
 repository = "https://github.com/bloveless/spacetraders-rs"
+documentation = "https://docs.rs/spacetraders"
 
 [lib]
 name = "spacetraders"
