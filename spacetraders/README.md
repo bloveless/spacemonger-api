@@ -21,7 +21,7 @@ A brief example is included below.
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let game = Game::new(
         "your-username".to_string(),
-        "your-toke".to_string(),
+        "your-token".to_string(),
     );
 
     let mut current_user_info = game.get_user_info().await?;
