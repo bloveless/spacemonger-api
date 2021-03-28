@@ -14,7 +14,7 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 
 FROM debian:buster
 
-RUN mkdir /app \
+RUN mkdir -p /app/migrations \
     && useradd -ms /bin/bash spacetraders \
     && chown -R spacetraders:spacetraders /app \
     && apt-get update \
@@ -27,5 +27,6 @@ USER spacetraders
 
 COPY --from=builder --chown=spacetraders:spacetraders /app/target/release/spacetraders-rs /app/
 COPY --chown=spacetraders:spacetraders ./entrypoint.sh /app/
+COPY --chown=spacetraders:spacetraders ./migrations /app/migrations/
 
 ENTRYPOINT ["/app/entrypoint.sh"]

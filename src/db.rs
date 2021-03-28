@@ -1,6 +1,11 @@
 use spacetraders::{shared, responses};
 use tokio_postgres::{Client, NoTls, Error};
 
+mod embedded {
+    use refinery::embed_migrations;
+    embed_migrations!("migrations");
+}
+
 #[derive(Debug)]
 pub struct User {
     pub id: String,
@@ -20,53 +25,20 @@ pub async fn get_client(host: String, username: String, password: String, databa
     Ok(client)
 }
 
-pub async fn setup_tables(client: &mut Client) -> Result<(), Error> {
-    Ok(
-        client.batch_execute("
-            CREATE TABLE IF NOT EXISTS users (
-                 id VARCHAR(100) NOT NULL PRIMARY KEY
-                ,username VARCHAR(100) NOT NULL
-                ,token VARCHAR(100) NOT NULL
-                ,active BOOLEAN NOT NULL DEFAULT FALSE
-                ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-            );
+pub async fn run_migrations(client: &mut Client) -> Result<(), Box<dyn std::error::Error>> {
+    let migration_report = embedded::migrations::runner().run_async(client).await?;
 
-            CREATE TABLE IF NOT EXISTS market_data (
-                 planet_symbol VARCHAR(100) NOT NULL
-                ,good_symbol VARCHAR(100) NOT NULL
-                ,price_per_unit INT NOT NULL
-                ,volume_per_unit INT NOT NULL
-                ,available INT NOT NULL
-                ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-            );
+    for migration in migration_report.applied_migrations() {
+        println!(
+            "Migration Applied -  Name: {}, Version: {}",
+            migration.name(),
+            migration.version()
+        );
+    }
 
-            CREATE TABLE IF NOT EXISTS flight_plans (
-                 ship_id VARCHAR(100) NOT NULL
-                ,flight_plan_id VARCHAR(100) NOT NULL
-                ,origin VARCHAR(100) NOT NULL
-                ,destination VARCHAR(100) NOT NULL
-                ,ship_cargo_volume INT NOT NULL
-                ,ship_cargo_volume_max INT NOT NULL
-                ,distance INT NOT NULL
-                ,fuel_consumed INT NOT NULL
-                ,fuel_remaining INT NOT NULL
-                ,time_remaining_in_seconds INT NOT NULL
-                ,arrives_at TIMESTAMP WITH TIME ZONE NOT NULL
-                ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-            );
+    println!("DB migrations finished");
 
-            CREATE TABLE IF NOT EXISTS system_info (
-                 system VARCHAR(100) NOT NULL
-                ,system_name VARCHAR(100) NOT NULL
-                ,location VARCHAR(100) NOT NULL
-                ,location_name VARCHAR(100) NOT NULL
-                ,location_type VARCHAR(100) NOT NULL
-                ,x INT NOT NULL
-                ,y INT NOT NULL
-                ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-            );
-        ").await?
-    )
+    Ok(())
 }
 
 pub async fn get_current_user(client: &mut Client) -> Result<User, Error> {

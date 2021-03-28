@@ -94,7 +94,7 @@ pub async fn scan_system(game: &Game, ship: shared::Ship, client: &mut Client) -
 
             let marketplace_info = game.get_location_marketplace(location.symbol.clone()).await?;
 
-            for datum in marketplace_info.planet.marketplace {
+            for datum in marketplace_info.location.marketplace {
                 println!("Location: {}, Good: {:?}, Available: {}, Price Per Unit: {}", &location.symbol, &datum.symbol, &datum.quantity_available, &datum.price_per_unit);
 
                 db::persist_market_data(client, &location, &datum).await?;

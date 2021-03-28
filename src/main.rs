@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut client = db::get_client(postgres_host, postgres_username, postgres_password, postgres_database).await?;
 
-    db::setup_tables(&mut client).await?;
+    db::run_migrations(&mut client).await?;
 
     // 1. get user
     let current_user = db::get_current_user(&mut client).await?;
@@ -39,6 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // assume that if the user has 0 credits that the user needs to take out a loan
         current_user_info = game.request_new_loan(LoanType::Startup).await?;
     }
+
+    let location_info = game.get_location_info("OE-PM-TR".to_string()).await?;
+    println!("Location Info {:?}", location_info);
+
+    return Ok(());
 
     // 3. if the user doesn't have any ships then buy the fastest one that the user can afford
     if current_user_info.user.ships.len() == 0 {
@@ -73,109 +78,122 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // potentially we only need to make a full system scan if there are any locations that we don't have any market data for
 
-
-
-    // TODO: deal with the loan
-
-    if args[1] == "scan-system" {
-        println!("-------------------------------------------------------------------------------");
-        println!("BEGINNING SYSTEM SCAN ---------------------------------------------------------");
-        println!("-------------------------------------------------------------------------------");
-
-        let fastest_ship = funcs::get_fastest_ship(&game).await?.unwrap();
-        println!("Fastest Ship: {:?}", &fastest_ship);
-
-        funcs::scan_system(&game, fastest_ship.clone(), &mut client).await?;
+    for loan in current_user_info.user.loans {
+        // pay the loan off if we have enough left over afterward
+        if current_user_info.user.credits > loan.repayment_amount * 2 {
+            current_user_info = game.pay_off_loan(loan.id).await?;
+        }
     }
 
-    if args[1] == "run-trade-route" {
-        println!("-------------------------------------------------------------------------------");
-        println!("RUNNING TRADE ROUTE -----------------------------------------------------------");
-        println!("-------------------------------------------------------------------------------");
+    println!("-------------------------------------------------------------------------------");
+    println!("BEGINNING SYSTEM SCAN ---------------------------------------------------------");
+    println!("-------------------------------------------------------------------------------");
 
-        let mut fastest_ship = funcs::get_fastest_ship(&game).await?.unwrap();
-        let pickup_location = "OE-A1";
-        let sell_location = "OE-A1-M1";
-        let good_symbol = shared::Good::Research;
+    // let fastest_ship = funcs::get_fastest_ship(&game).await?.unwrap();
+    // println!("Fastest Ship: {:?}", &fastest_ship);
+    //
+    // funcs::scan_system(&game, fastest_ship.clone(), &mut client).await?;
 
-        loop {
-            // get ship to 20 fuel
-            // let ship_info = game.get_your_ships().await?;
-            // let mut ship_info = ship_info.ships.iter().find(|s| s.id == fastest_ship.id).unwrap().to_owned();
+    // rather than scanning the system just go here
+    // https://spacetrader-38625.web.app/ and pick a good trade so we can get started
 
-            let ship_fuel = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == shared::Good::Fuel { sum + cargo.quantity } else { sum });
-            println!("Current ship fuel: {}", ship_fuel);
+    // now that the system scan is complete pick the most profitable trade route and crush it
 
-            if ship_fuel < 20 {
-                println!("Purchasing {} fuel", 20 - ship_fuel);
-                game.create_purchase_order(fastest_ship.clone(), shared::Good::Fuel, 20 - ship_fuel).await?;
-                fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-            }
+    println!("-------------------------------------------------------------------------------");
+    println!("RUNNING TRADE ROUTE -----------------------------------------------------------");
+    println!("-------------------------------------------------------------------------------");
 
-            // go to pickup location
-            println!("Going to pickup location {}", pickup_location);
-            let flight_plan = funcs::create_flight_plan(&game, &mut client, &fastest_ship, pickup_location.to_string()).await?;
+    let mut fastest_ship = funcs::get_fastest_ship(&game).await?.unwrap();
+    let buy_location = "OE-PM".to_string();
+    let sell_location = "OE-PM-TR".to_string();
+    let good_symbol = shared::Good::Workers;
+
+    loop {
+        // get ship to 20 fuel
+        // let ship_info = game.get_your_ships().await?;
+        // let mut ship_info = ship_info.ships.iter().find(|s| s.id == fastest_ship.id).unwrap().to_owned();
+
+        let ship_fuel = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == shared::Good::Fuel { sum + cargo.quantity } else { sum });
+        println!("Current ship fuel: {}", ship_fuel);
+
+        if ship_fuel < 20 {
+            println!("Purchasing {} fuel", 20 - ship_fuel);
+            game.create_purchase_order(fastest_ship.clone(), shared::Good::Fuel, 20 - ship_fuel).await?;
+            fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
+        }
+
+        // go to pickup location
+        println!("Going to pickup location {}", buy_location);
+        if fastest_ship.location != Some(buy_location.to_owned()) {
+            let flight_plan = funcs::create_flight_plan(&game, &mut client, &fastest_ship, buy_location.to_owned()).await?;
             fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
             println!("Flight plan: {:?}", &flight_plan);
             println!("Waiting {} seconds", flight_plan.flight_plan.time_remaining_in_seconds + 2);
 
             tokio::time::sleep(Duration::from_secs(u64::try_from(flight_plan.flight_plan.time_remaining_in_seconds + 2).unwrap())).await;
+        }
 
-            // get ship to 20 fuel
-            let ship_fuel = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == shared::Good::Fuel { sum + cargo.quantity } else { sum });
-            println!("Current ship fuel: {}", ship_fuel);
+        // get ship to 20 fuel
+        let ship_fuel = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == shared::Good::Fuel { sum + cargo.quantity } else { sum });
+        println!("Current ship fuel: {}", ship_fuel);
 
-            if ship_fuel < 20 {
-                println!("Purchasing {} fuel", 20 - ship_fuel);
-                game.create_purchase_order(fastest_ship.clone(), shared::Good::Fuel, 20 - ship_fuel).await?;
-                fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-            }
+        if ship_fuel < 20 {
+            println!("Purchasing {} fuel", 20 - ship_fuel);
+            game.create_purchase_order(fastest_ship.clone(), shared::Good::Fuel, 20 - ship_fuel).await?;
+        }
 
-            // buy as much good as possible
-            let current_cargo = fastest_ship.cargo.iter().fold(0, |sum, cargo| sum + cargo.quantity);
-            let available_room = fastest_ship.max_cargo - current_cargo;
-            println!("Current cargo: {}, available room: {}", current_cargo, available_room);
+        fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
 
-            let user_credits = game.get_user_info().await?.user.credits;
-            println!("Current user credits: {}", user_credits);
-            let marketplace_info = game.get_location_marketplace(pickup_location.to_string()).await?;
+        println!("Fastest ship: {:?}", fastest_ship);
 
-            let good_cost = marketplace_info.planet.marketplace.iter().find(|d| d.symbol == good_symbol).unwrap().price_per_unit;
-            println!("Good cost: {}", good_cost);
-            let max_good_to_buy = user_credits / good_cost;
-            println!("Max good to buy: {}", max_good_to_buy);
+        // buy as much good as possible
+        println!("Space available: {}", fastest_ship.space_available);
 
-            let actual_good_to_buy = min(max_good_to_buy, available_room);
-            println!("Actual good to buy: {}", actual_good_to_buy);
+        let user_credits = game.get_user_info().await?.user.credits;
+        println!("Current user credits: {}", user_credits);
+        let marketplace_info = game.get_location_marketplace(buy_location.to_owned()).await?;
 
-            if actual_good_to_buy > 0 {
-                let purchase_response = game.create_purchase_order(fastest_ship.clone(), good_symbol.clone(), actual_good_to_buy).await?;
-                fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-                println!("Good purchase response: {:?}", purchase_response);
-            } else {
-                println!("Not purchasing anything...");
-            }
+        let good = marketplace_info.location.marketplace.iter().find(|d| d.symbol == good_symbol).unwrap();
+        println!("Good cost: {}", good.price_per_unit);
+        let max_good_to_buy = user_credits / good.price_per_unit;
+        println!("Max good to buy based on cost: {}", max_good_to_buy);
 
-            // go to OE-A1-M1
+        let max_good_by_volume = fastest_ship.space_available / good.volume_per_unit;
+        println!("Max good available to buy based on space available: {}", max_good_by_volume);
+
+        let actual_good_to_buy = min(max_good_to_buy, max_good_by_volume);
+        println!("Actual good to buy: {}", actual_good_to_buy);
+
+        if actual_good_to_buy > 0 {
+            let purchase_response = game.create_purchase_order(fastest_ship.clone(), good_symbol.clone(), actual_good_to_buy).await?;
+            println!("Good purchase response: {:?}", purchase_response);
+        } else {
+            println!("Not purchasing anything...");
+        }
+
+        fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
+
+        // go to OE-A1-M1
+        if fastest_ship.location != Some(sell_location.to_owned()) {
             println!("Going to sell location: {}", sell_location);
-            let flight_plan = funcs::create_flight_plan(&game, &mut client, &fastest_ship, sell_location.to_string()).await?;
+            let flight_plan = funcs::create_flight_plan(&game, &mut client, &fastest_ship, sell_location.to_owned()).await?;
             fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
             println!("Flight plan: {:?}", &flight_plan);
             println!("Waiting {} seconds", flight_plan.flight_plan.time_remaining_in_seconds + 2);
 
             tokio::time::sleep(Duration::from_secs(u64::try_from(flight_plan.flight_plan.time_remaining_in_seconds + 2).unwrap())).await;
+        }
 
-            // sell all good
-            let current_good_in_cargo = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == good_symbol { sum + cargo.quantity } else { sum });
+        // sell all good
+        let current_good_in_cargo = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == good_symbol { sum + cargo.quantity } else { sum });
 
-            if current_good_in_cargo > 0 {
-                println!("Selling {} good cargo", current_good_in_cargo);
-                let sell_response = game.create_sell_order(fastest_ship.id.to_string(), good_symbol.clone(), current_good_in_cargo).await?;
-                fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-                println!("Sell response: {:?}", sell_response);
-            } else {
-                println!("Didn't find any good in cargo to sell...");
-            }
+        if current_good_in_cargo > 0 {
+            println!("Selling {} good cargo", current_good_in_cargo);
+            let sell_response = game.create_sell_order(fastest_ship.id.to_string(), good_symbol.clone(), current_good_in_cargo).await?;
+            fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
+            println!("Sell response: {:?}", sell_response);
+        } else {
+            println!("Didn't find any good in cargo to sell...");
         }
     }
 
