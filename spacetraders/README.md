@@ -20,8 +20,8 @@ A brief example is included below.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let game = Game::new(
-        current_user.username,
-        current_user.token,
+        "your-username".to_string(),
+        "your-toke".to_string(),
     );
 
     let mut current_user_info = game.get_user_info().await?;
