@@ -87,6 +87,12 @@ pub enum LocationType {
     /// An asteroid
     #[serde(rename = "ASTEROID")]
     Asteroid,
+    /// A Wormhole
+    #[serde(rename = "WORMHOLE")]
+    Wormhole,
+    /// A nebula
+    #[serde(rename = "NEBULA")]
+    Nebula,
 }
 
 impl fmt::Display for LocationType {
@@ -307,7 +313,9 @@ pub struct SystemsInfoLocation {
     /// The ships currently docked in a system location
     pub ships: Vec<Ship>,
     /// The structures within a system location
-    pub structures: Vec<Structures>,
+    pub structures: Option<Vec<Structures>>,
+    /// Any messages relating to this system location
+    pub messages: Option<Vec<String>>,
 }
 
 /// The representation of a system

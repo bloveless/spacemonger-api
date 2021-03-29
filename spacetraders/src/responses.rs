@@ -130,11 +130,11 @@ pub struct User {
 /// The representation of a claim username response
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
-pub struct ClaimUsernameResponse {
+pub struct ClaimUsername {
     /// The token of the claimed username
     pub token: String,
     /// The user info of the claimed username
-    pub user: User,
+    pub user: UserInfoData,
 }
 
 /// The representation of your ships response

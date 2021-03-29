@@ -2,24 +2,82 @@
 use crate::{responses, requests};
 use crate::shared;
 
-use reqwest::Client;
+use reqwest::Client as ReqwestClient;
 use serde::Deserialize;
 
-/// A game that is associated to a specific user
-pub struct Game {
-    client: Client,
-    username: String,
-    // token: String,
+/// Parse a response string into the type represented by T
+/// If the `response_text` cannot be parsed into type T then it is assumed that an error
+/// occurred and an shared::ErrorMessage will be returned
+///
+/// # Arguments
+///
+/// * `response_text` - A string containing the JSON response to be parsed
+fn parse_response<'a, T: Deserialize<'a>>(response_text: &'a String) -> Result<T, Box<dyn std::error::Error>> {
+    match serde_json::from_str::<T>(&response_text) {
+        Ok(o) => Ok(o),
+        Err(e) => {
+            println!("Error processing type {:?}: {}", std::any::type_name::<T>(), e);
+            println!("Error response: {}", &response_text);
+
+            match serde_json::from_str::<shared::ErrorMessage>(&response_text) {
+                Ok(error_message) => Err(Box::new(error_message)),
+                Err(e) => Err(Box::new(e)),
+            }
+        }
+    }
 }
 
-impl Game {
+/// Claim a username and get a token
+///
+/// # Arguments
+///
+/// * `username` - A string containing the username to get a token for
+pub async fn claim_username(username: String) -> Result<responses::ClaimUsername, Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let response_text = client.post(&format!("https://api.spacetraders.io/users/{}/token", username))
+        .body("this response body doesn't matter")
+        .send().await?
+        .text().await?;
+
+    println!("ResponseText: {}", response_text.to_owned());
+
+    parse_response::<responses::ClaimUsername>(&response_text)
+    //
+    // // {"token":,"user":{"username":"bloveless2-main","credits":0,"ships":[],"loans":[]}}
+    // // TODO: Temp response
+    // Ok(responses::ClaimUsername {
+    //     token: "a97b2d7c-79a2-4cdf-888d-a4dab7619c48".to_string(),
+    //     user: ClaimUsernameUser {
+    //         id: "".to_string(),
+    //         username: "bloveless2-main".to_string(),
+    //         picture: None,
+    //         email: None,
+    //         credits: 0,
+    //         created_at: Utc::now(),
+    //         updated_at: Utc::now(),
+    //     },
+    // })
+}
+
+/// A game that is associated to a specific username
+#[derive(Debug)]
+pub struct Client {
+    http_client: ReqwestClient,
+    /// The users spacetraders API id
+    pub user_id: String,
+    /// The users username
+    pub username: String,
+    // pub token: String,
+}
+
+impl Client {
     /// Create a new game with a reqwest client that has the Authorization header set
     ///
     /// # Arguments
     ///
     /// * `username` - A string containing the username of the current player
     /// * `token` - A string containing the access token for the username provided
-    pub fn new(username: String, token: String) -> Game {
+    pub fn new(user_id: String, username: String, token: String) -> Client {
         let mut default_headers = reqwest::header::HeaderMap::new();
         default_headers.insert(
             "Authorization",
@@ -31,32 +89,11 @@ impl Game {
             .build()
             .expect("unable to create game client");
 
-        Game {
-            client,
+        Client {
+            http_client: client,
+            user_id,
             username,
             // token,
-        }
-    }
-
-    /// Parse a response string into the type represented by T
-    /// If the `response_text` cannot be parsed into type T then it is assumed that an error
-    /// occurred and an shared::ErrorMessage will be returned
-    ///
-    /// # Arguments
-    ///
-    /// * `response_text` - A string containing the JSON response to be parsed
-    fn parse_response<'a, T: Deserialize<'a>>(&self, response_text: &'a String) -> Result<T, Box<dyn std::error::Error>> {
-        match serde_json::from_str::<T>(&response_text) {
-            Ok(o) => Ok(o),
-            Err(e) => {
-                println!("Error processing type {:?}: {}", std::any::type_name::<T>(), e);
-                println!("Error response: {}", &response_text);
-
-                match serde_json::from_str::<shared::ErrorMessage>(&response_text) {
-                    Ok(error_message) => Err(Box::new(error_message)),
-                    Err(e) => Err(Box::new(e)),
-                }
-            }
         }
     }
 
@@ -66,11 +103,11 @@ impl Game {
     ///
     /// * `flight_plan_id` - A string containing the flight plan id
     pub async fn get_flight_plan(&self, flight_plan_id: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, flight_plan_id))
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, flight_plan_id))
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::FlightPlan>(&response_text)
+        parse_response::<responses::FlightPlan>(&response_text)
     }
 
     /// Create a flight plan.
@@ -85,39 +122,39 @@ impl Game {
             destination,
         };
 
-        let response_text = self.client.post(&format!("https://api.spacetraders.io/users/{}/flight-plans", self.username).to_string())
+        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/flight-plans", self.username).to_string())
             .json(&flight_plan_request)
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::FlightPlan>(&response_text)
+        parse_response::<responses::FlightPlan>(&response_text)
     }
 
     /// Get the status of the game API.
     pub async fn get_game_status(&self) -> Result<responses::GameStatus, Box<dyn std::error::Error>> {
-        let response_text = self.client.get("https://api.spacetraders.io/game/status")
+        let response_text = self.http_client.get("https://api.spacetraders.io/game/status")
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::GameStatus>(&response_text)
+        parse_response::<responses::GameStatus>(&response_text)
     }
 
     /// Get all available loans
     pub async fn get_available_loans(&self) -> Result<responses::AvailableLoans, Box<dyn std::error::Error>> {
-        let response_text = self.client.get("https://api.spacetraders.io/game/loans")
+        let response_text = self.http_client.get("https://api.spacetraders.io/game/loans")
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::AvailableLoans>(&response_text)
+        parse_response::<responses::AvailableLoans>(&response_text)
     }
 
     /// Get any loans taken out by the current user
     pub async fn get_your_loans(&self) -> Result<responses::LoanInfo, Box<dyn std::error::Error>> {
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}/loans", self.username))
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/loans", self.username))
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::LoanInfo>(&response_text)
+        parse_response::<responses::LoanInfo>(&response_text)
     }
 
     /// Pay off a loan completely
@@ -126,11 +163,11 @@ impl Game {
     ///
     /// * `loan_id` - A string containing the loan_id of the loan to pay off
     pub async fn pay_off_loan(&self, loan_id: String) -> Result<responses::UserInfo, Box<dyn std::error::Error>> {
-        let response_text = self.client.put(&format!("https://api.spacetraders.io/users/{}/loans/{}", self.username, loan_id).to_string())
+        let response_text = self.http_client.put(&format!("https://api.spacetraders.io/users/{}/loans/{}", self.username, loan_id).to_string())
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::UserInfo>(&response_text)
+        parse_response::<responses::UserInfo>(&response_text)
     }
 
     /// Request a new loan
@@ -143,12 +180,12 @@ impl Game {
             loan_type
         };
 
-        let response_text = self.client.post(&format!("https://api.spacetraders.io/users/{}/loans", self.username).to_string())
+        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/loans", self.username).to_string())
             .json(&request_new_loan_request)
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::UserInfo>(&response_text)
+        parse_response::<responses::UserInfo>(&response_text)
     }
 
     /// Get location info about a specific location
@@ -157,11 +194,11 @@ impl Game {
     ///
     /// * `location` - A string containing the location name to get info about
     pub async fn get_location_info(&self, location: String) -> Result<responses::LocationInfo, Box<dyn std::error::Error>> {
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/game/locations/{}", location).to_string())
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/game/locations/{}", location).to_string())
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::LocationInfo>(&response_text)
+        parse_response::<responses::LocationInfo>(&response_text)
     }
 
     /// Get all the locations in a particular system
@@ -176,12 +213,12 @@ impl Game {
             query.push(("type", location_type));
         }
 
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/game/systems/{}/locations", system).to_string())
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/game/systems/{}/locations", system).to_string())
             .query(&query)
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::AvailableLocations>(&response_text)
+        parse_response::<responses::AvailableLocations>(&response_text)
     }
 
     /// Get the marketplace data about a location.
@@ -194,11 +231,11 @@ impl Game {
     ///
     /// * `location` - A string containing the name of the location to get marketplace data for
     pub async fn get_location_marketplace(&self, location: String) -> Result<responses::LocationMarketplace, Box<dyn std::error::Error>> {
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/game/locations/{}/marketplace", location))
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/game/locations/{}/marketplace", location))
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::LocationMarketplace>(&response_text)
+        parse_response::<responses::LocationMarketplace>(&response_text)
     }
 
     /// Create a purchase order to transfer goods from a location to your ship
@@ -215,12 +252,12 @@ impl Game {
             quantity,
         };
 
-        let response_text = self.client.post(&format!("https://api.spacetraders.io/users/{}/purchase-orders", self.username).to_string())
+        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/purchase-orders", self.username).to_string())
             .json(&purchase_order_request)
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::PurchaseOrder>(&response_text)
+        parse_response::<responses::PurchaseOrder>(&response_text)
     }
 
     /// Create a sell order to transfer good from your ship to a location. Your ship will
@@ -238,12 +275,12 @@ impl Game {
             quantity,
         };
 
-        let response_text = self.client.post(&format!("https://api.spacetraders.io/users/{}/sell-orders", self.username))
+        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/sell-orders", self.username))
             .json(&sell_order_request)
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::PurchaseOrder>(&response_text)
+        parse_response::<responses::PurchaseOrder>(&response_text)
     }
 
     /// Add a ship to the users inventory by purchasing it
@@ -258,57 +295,57 @@ impl Game {
             ship_type,
         };
 
-        let response_text = self.client.post(&format!("https://api.spacetraders.io/users/{}/ships", self.username).to_string())
+        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/ships", self.username).to_string())
             .json(&purchase_ship_request)
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::UserInfo>(&response_text)
+        parse_response::<responses::UserInfo>(&response_text)
     }
 
     /// Get all ships that are available for sale
     pub async fn get_ships_for_sale(&self) -> Result<responses::ShipsForSale, Box<dyn std::error::Error>> {
-        let response_text = self.client.get("https://api.spacetraders.io/game/ships")
+        let response_text = self.http_client.get("https://api.spacetraders.io/game/ships")
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::ShipsForSale>(&response_text)
+        parse_response::<responses::ShipsForSale>(&response_text)
     }
 
     /// Get all your ships
     pub async fn get_your_ships(&self) -> Result<responses::YourShips, Box<dyn std::error::Error>> {
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}/ships", self.username).to_string())
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/ships", self.username).to_string())
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::YourShips>(&response_text)
+        parse_response::<responses::YourShips>(&response_text)
     }
 
     /// Get information about all systems
     pub async fn get_systems_info(&self) -> Result<responses::SystemsInfo, Box<dyn std::error::Error>> {
-        let response_text = self.client.get("https://api.spacetraders.io/game/systems")
+        let response_text = self.http_client.get("https://api.spacetraders.io/game/systems")
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::SystemsInfo>(&response_text)
+        parse_response::<responses::SystemsInfo>(&response_text)
     }
 
     /// You begin the game by claiming a username and receiving a token for that username.
     /// This will automatically use the username that was assigned when the Game struct was created
-    pub async fn claim_username_get_token(&self) -> Result<responses::ClaimUsernameResponse, Box<dyn std::error::Error>> {
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}/token", self.username).to_string())
+    pub async fn claim_username_get_token(&self) -> Result<responses::ClaimUsername, Box<dyn std::error::Error>> {
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/token", self.username).to_string())
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::ClaimUsernameResponse>(&response_text)
+        parse_response::<responses::ClaimUsername>(&response_text)
     }
 
     /// Get all information about the current user
     pub async fn get_user_info(&self) -> Result<responses::UserInfo, Box<dyn std::error::Error>> {
-        let response_text = self.client.get(&format!("https://api.spacetraders.io/users/{}", self.username).to_string())
+        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}", self.username).to_string())
             .send().await?
             .text().await?;
 
-        self.parse_response::<responses::UserInfo>(&response_text)
+        parse_response::<responses::UserInfo>(&response_text)
     }
 }

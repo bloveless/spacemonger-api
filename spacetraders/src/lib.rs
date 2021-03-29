@@ -6,7 +6,7 @@
 //! [SpaceTraders]: https://spacetraders.io/
 #![warn(missing_docs)]
 
-pub mod game;
+pub mod client;
 pub mod shared;
 pub mod responses;
 pub mod requests;

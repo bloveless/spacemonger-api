@@ -1,8 +1,11 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE users (
-     id VARCHAR(100) NOT NULL PRIMARY KEY
-    ,username VARCHAR(100) NOT NULL
+     id UUID DEFAULT uuid_generate_v4()
+    ,username VARCHAR(100) NOT NULL UNIQUE
     ,token VARCHAR(100) NOT NULL
-    ,active BOOLEAN NOT NULL DEFAULT FALSE
+    ,assignment VARCHAR(50) NOT NULL
+    ,location VARCHAR(50) NULL
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
@@ -17,6 +20,7 @@ CREATE TABLE market_data (
 
 CREATE TABLE flight_plans (
      flight_plan_id VARCHAR(100) NOT NULL PRIMARY KEY
+    ,user_id UUID NOT NULL
     ,ship_id VARCHAR(100) NOT NULL
     ,origin VARCHAR(100) NOT NULL
     ,destination VARCHAR(100) NOT NULL

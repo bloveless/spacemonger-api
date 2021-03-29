@@ -19,12 +19,12 @@ A brief example is included below.
 ```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let game = Game::new(
+    let client = Client::new(
         "your-username".to_string(),
         "your-token".to_string(),
     );
 
-    let mut current_user_info = game.get_user_info().await?;
+    let mut current_user_info = client.get_user_info().await?;
     println!("Current user info {:?}", current_user_info);
 
     // Continue calling other functions and build cool things!
