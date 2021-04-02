@@ -5,15 +5,21 @@ use spacetraders::{client::Client, client};
 use std::env;
 use dotenv::dotenv;
 use tokio_postgres::Client as PgClient;
+use std::time::Duration;
+use tower::limit::RateLimit;
+use tower::util::ServiceFn;
+use std::sync::Arc;
 
-const BASE_ACCOUNT_NAME: &str = "bloveless5";
+const BASE_ACCOUNT_NAME: &str = "bloveless";
 
-async fn get_client_for_user(pg_client: &mut PgClient, username: String, assignment: String, location: Option<String>) -> Result<Client, Box<dyn std::error::Error>> {
+type ClientRateLimiter = Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>;
+
+async fn get_client_for_user(client_rate_limiter: ClientRateLimiter, pg_client: &mut PgClient, username: String, assignment: String, location: Option<String>) -> Result<Client, Box<dyn std::error::Error>> {
     let db_user = db::get_user(pg_client, username.to_owned()).await?;
 
     if let Some(user) = db_user {
         println!("Found existing user {}", username);
-        Ok(Client::new(user.id, user.username, user.token))
+        Ok(Client::new(client_rate_limiter, user.id, user.username, user.token))
     } else {
         println!("Creating new user {}", username);
         let claimed_user = client::claim_username(username.to_owned()).await?;
@@ -30,7 +36,7 @@ async fn get_client_for_user(pg_client: &mut PgClient, username: String, assignm
 
         println!("New user persisted");
 
-        Ok(Client::new(user.id.to_owned(), username.to_owned(), claimed_user.token.to_owned()))
+        Ok(Client::new(client_rate_limiter, user.id.to_owned(), username.to_owned(), claimed_user.token.to_owned()))
     }
 }
 
@@ -52,7 +58,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // in the system. Create (or get from db) X scout accounts (where X is number of locations in
     // the system). Send each scout account to the location they are assigned.
 
-    let main_user = get_client_for_user(&mut pg_client, format!("{}-main", BASE_ACCOUNT_NAME), "main".to_string(), None).await?;
+    let client = reqwest::Client::new();
+    let mut svc = tower::ServiceBuilder::new()
+        .rate_limit(2, Duration::new(1, 0)) // rate limit of 2 per second
+        .service(tower::service_fn(move |req| client.execute(req)));
+
+    let game_rate_limiter = Arc::new(client::get_rate_limiter());
+
+    let main_user = get_client_for_user(game_rate_limiter, &mut svc, &mut pg_client, format!("{}-main", BASE_ACCOUNT_NAME), "main".to_string(), None).await?;
 
     let system_info = main_user.get_systems_info().await?;
 
@@ -80,6 +93,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Scout Users: {:?}", scouts);
+
+    println!("Main user info: {:?}",  main_user.get_user_info().await?);
+
+    for scout in scouts {
+        println!("Scout user info: {:?}",  scout.get_user_info().await?);
+    }
 
     Ok(())
 }
