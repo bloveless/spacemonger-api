@@ -22,8 +22,9 @@ pub struct User {
     pub location: Option<String>,
 }
 
-pub async fn get_client(host: String, username: String, password: String, database: String) -> Result<PgClient, Error> {
-    let (pg_client, connection) = tokio_postgres::connect(&format!("host={} user={} password={} dbname={}", host, username, password, database), NoTls).await?;
+pub async fn get_client(host: String, port: i32, username: String, password: String, database: String) -> Result<PgClient, Error> {
+    let connection_url = format!("postgresql://{}:{}@{}:{}/{}", username, password, host, port, database);
+    let (pg_client, connection) = tokio_postgres::connect(&connection_url, NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {

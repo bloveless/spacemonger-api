@@ -6,8 +6,6 @@ use std::env;
 use dotenv::dotenv;
 use tokio_postgres::Client as PgClient;
 use std::time::Duration;
-use tower::limit::RateLimit;
-use tower::util::ServiceFn;
 use std::sync::Arc;
 
 const BASE_ACCOUNT_NAME: &str = "bloveless";
@@ -50,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let postgres_password = env::var("POSTGRES_PASSWORD").unwrap();
     let postgres_database = env::var("POSTGRES_DATABASE").unwrap();
 
-    let mut pg_client = db::get_client(postgres_host, postgres_username, postgres_password, postgres_database).await?;
+    let mut pg_client = db::get_client(postgres_host, 5433, postgres_username, postgres_password, postgres_database).await?;
 
     db::run_migrations(&mut pg_client).await?;
 
@@ -58,14 +56,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // in the system. Create (or get from db) X scout accounts (where X is number of locations in
     // the system). Send each scout account to the location they are assigned.
 
-    let client = reqwest::Client::new();
-    let mut svc = tower::ServiceBuilder::new()
-        .rate_limit(2, Duration::new(1, 0)) // rate limit of 2 per second
-        .service(tower::service_fn(move |req| client.execute(req)));
-
     let game_rate_limiter = Arc::new(client::get_rate_limiter());
 
-    let main_user = get_client_for_user(game_rate_limiter, &mut svc, &mut pg_client, format!("{}-main", BASE_ACCOUNT_NAME), "main".to_string(), None).await?;
+    let main_user = get_client_for_user(game_rate_limiter.clone(), &mut pg_client, format!("{}-main", BASE_ACCOUNT_NAME), "main".to_string(), None).await?;
 
     let system_info = main_user.get_systems_info().await?;
 
@@ -86,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for system in &system_info.systems {
         for location in &system.locations {
             println!("Create user {}-scout-{}", BASE_ACCOUNT_NAME, location.symbol);
-            let scout_user = get_client_for_user(&mut pg_client, format!("{}-scout-{}", BASE_ACCOUNT_NAME, location.symbol), "scout".to_string(), Some(location.symbol.to_owned())).await?;
+            let scout_user = get_client_for_user(game_rate_limiter.clone(), &mut pg_client, format!("{}-scout-{}", BASE_ACCOUNT_NAME, location.symbol), "scout".to_string(), Some(location.symbol.to_owned())).await?;
 
             scouts.push(scout_user);
         }

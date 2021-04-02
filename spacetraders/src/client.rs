@@ -7,6 +7,7 @@ use serde::Deserialize;
 use governor::{RateLimiter, Quota};
 use std::num::NonZeroU32;
 use governor::{state::{NotKeyed, InMemoryState}, clock::DefaultClock};
+use std::sync::Arc;
 
 pub fn get_rate_limiter() -> RateLimiter<NotKeyed, InMemoryState, DefaultClock> {
     let quota = Quota::per_second(NonZeroU32::new(2u32).unwrap());
@@ -71,7 +72,7 @@ impl Client {
     ///
     /// * `username` - A string containing the username of the current player
     /// * `token` - A string containing the access token for the username provided
-    pub fn new(rate_limiter: RateLimiter<NotKeyed, InMemoryState, DefaultClock>, user_id: String, username: String, token: String) -> Client {
+    pub fn new(rate_limiter: Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>, user_id: String, username: String, token: String) -> Client {
         let mut default_headers = reqwest::header::HeaderMap::new();
         default_headers.insert(
             "Authorization",
