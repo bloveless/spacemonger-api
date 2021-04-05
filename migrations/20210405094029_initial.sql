@@ -44,3 +44,10 @@ CREATE TABLE system_info (
     ,y INT NOT NULL
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+
+CREATE UNIQUE INDEX idx_system_info_system_location
+    ON system_info (system, location);
+
+ALTER TABLE system_info
+    ADD CONSTRAINT unique_system_info_system_location
+    UNIQUE USING INDEX idx_system_info_system_location;

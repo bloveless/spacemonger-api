@@ -1,5 +1,5 @@
 apiVersion: batch/v1
-kind: Job
+kind: Pod
 metadata:
   name: spacetraders-scan-system
   namespace: spacetraders
@@ -9,16 +9,17 @@ spec:
   template:
     spec:
       containers:
-        - name: spacetraders-scan-system
+        - name: spacetraders
           image: bloveless/spacetraders:0.1.0-alpha.4
           command: ["/app/spacetraders-rs"]
-          args: ["scan-system"]
           envFrom:
             - secretRef:
                 name: spacetraders
           env:
             - name: POSTGRES_HOST
               value: 192.168.4.252
+            - name: POSTGRES_PORT
+              value: '5432'
             - name: POSTGRES_USERNAME
               value: spacetraders
             - name: POSTGRES_DATABASE

@@ -3,25 +3,24 @@ use spacetraders::{shared, responses};
 use tokio::time::Duration;
 use std::convert::TryFrom;
 use crate::db;
-use tokio_postgres::Client as PgClient;
 
-pub async fn create_flight_plan(client: &Client, db_client: &mut PgClient, user_id: String, ship: &shared::Ship, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
+pub async fn create_flight_plan(client: &Client, pg_pool: db::PgPool, user_id: String, ship: &shared::Ship, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
     let flight_plan = client.create_flight_plan(ship.id.to_owned(), destination.to_owned()).await?;
 
-    db::persist_flight_plan(db_client, user_id, ship, &flight_plan).await?;
+    db::persist_flight_plan(pg_pool, user_id, ship, &flight_plan).await?;
 
     Ok(flight_plan)
 }
 
-pub async fn get_systems(client: &Client, pg_client: &mut PgClient) -> Result<responses::SystemsInfo, Box<dyn std::error::Error>> {
+pub async fn get_systems(client: &Client, pg_pool: db::PgPool) -> Result<responses::SystemsInfo, Box<dyn std::error::Error>> {
     let systems_info = client.get_systems_info().await?;
     println!("Systems info: {:?}", systems_info);
 
-    db::truncate_system_info(pg_client).await?;
+    db::truncate_system_info(pg_pool.clone()).await?;
 
     for system in &systems_info.systems {
         for location in &system.locations {
-            db::persist_system_location(pg_client, system, location).await?;
+            db::persist_system_location(pg_pool.clone(), system, location).await?;
         }
     }
 
@@ -58,9 +57,9 @@ pub async fn get_ship(client: &Client, ship_id: String) -> Result<Option<shared:
     Ok(ship)
 }
 
-pub async fn scan_system(client: &Client, ship: shared::Ship, db_client: &mut PgClient) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn scan_system(client: &Client, ship: shared::Ship, pg_pool: db::PgPool) -> Result<(), Box<dyn std::error::Error>> {
     let mut ship = ship.clone();
-    let systems_info = get_systems(client, db_client).await?;
+    let systems_info = get_systems(client, pg_pool.clone()).await?;
 
     // Fill the ship as full as possible with fuel
     let ship_cargo_count = ship.cargo.iter().fold(0, |sum, cargo| sum + cargo.quantity);
@@ -83,7 +82,7 @@ pub async fn scan_system(client: &Client, ship: shared::Ship, db_client: &mut Pg
 
             // Don't attempt to fly to a location that the ship is already at
             if ship.clone().location != Some(location.symbol.clone()) {
-                let flight_plan = create_flight_plan(client, db_client, client.user_id.to_owned(), &ship, location.symbol.clone()).await?;
+                let flight_plan = create_flight_plan(client, pg_pool.clone(), client.user_id.to_owned(), &ship, location.symbol.clone()).await?;
                 println!("Flight plan: {:?}", &flight_plan);
 
                 println!("Waiting for {} seconds", flight_plan.flight_plan.time_remaining_in_seconds + 5);
@@ -97,7 +96,7 @@ pub async fn scan_system(client: &Client, ship: shared::Ship, db_client: &mut Pg
             for datum in marketplace_info.location.marketplace {
                 println!("Location: {}, Good: {:?}, Available: {}, Price Per Unit: {}", &location.symbol, &datum.symbol, &datum.quantity_available, &datum.price_per_unit);
 
-                db::persist_market_data(db_client, &location, &datum).await?;
+                db::persist_market_data(pg_pool.clone(), &location, &datum).await?;
             }
 
             let ship_info = client.get_your_ships().await?;

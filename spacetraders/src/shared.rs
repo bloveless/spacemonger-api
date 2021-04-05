@@ -63,6 +63,8 @@ pub enum Good {
     /// Ship plating
     #[serde(rename = "SHIP_PLATING")]
     ShipPlating,
+    #[serde(rename = "FUSION_REACTORS")]
+    FusionReactors,
 }
 
 impl fmt::Display for Good {
@@ -251,7 +253,7 @@ pub struct FlightPlanData {
     /// The id of the flight plan
     pub id: String,
     /// The id of the ship on this flight plan
-    #[serde(rename = "ship")]
+    #[serde(rename = "shipId")]
     pub ship_id: String,
     /// The fuel consumed by this flight plan
     #[serde(rename = "fuelConsumed")]
@@ -262,6 +264,8 @@ pub struct FlightPlanData {
     /// The time remaining until the ship arrives at the destination in seconds
     #[serde(rename = "timeRemainingInSeconds")]
     pub time_remaining_in_seconds: i32,
+    #[serde(rename = "createdAt")]
+    pub created_at: DateTime<Utc>,
     /// The DateTime at which the ship will arrive
     #[serde(rename = "arrivesAt")]
     pub arrives_at: DateTime<Utc>,
@@ -275,6 +279,15 @@ pub struct FlightPlanData {
     pub departure: String,
     /// The distance of the flight plan
     pub distance: i32,
+
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct StructureMaterial {
+    pub good: Good,
+    pub quantity: i32,
+    #[serde(rename = "targetQuantity")]
+    pub target_quantity: i32,
 }
 
 /// The structures that exist at a location
@@ -282,12 +295,11 @@ pub struct FlightPlanData {
 /// any current structures are. I'll have to do a system scan to get this info
 #[derive(Deserialize, Debug, Clone)]
 pub struct Structures {
-    /// X coordinate of the structure
-    pub x: i32,
-    /// Y coordinate of the structure
-    pub y: i32,
+    pub id: String,
     /// Name of the structure
     pub name: String,
+    pub completed: bool,
+    pub materials: Vec<StructureMaterial>,
 }
 
 /// A representation of a location within a system
@@ -334,17 +346,22 @@ pub struct SystemsInfoData {
 #[derive(Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct MarketplaceData {
-    /// How much of the good is available at this location
-    #[serde(rename = "quantityAvailable")]
-    pub quantity_available: i32,
-    /// The price per unit of the good
-    #[serde(rename = "pricePerUnit")]
-    pub price_per_unit: i32,
+    /// The type of good for this marketplace data
+    pub symbol: Good,
     /// How much volume this good consumes
     #[serde(rename = "volumePerUnit")]
     pub volume_per_unit: i32,
-    /// The type of good for this marketplace data
-    pub symbol: Good,
+    /// The price per unit of the good
+    #[serde(rename = "pricePerUnit")]
+    pub price_per_unit: i32,
+    pub spread: i32,
+    #[serde(rename = "purchasePricePerUnit")]
+    pub purchase_price_per_unit: i32,
+    #[serde(rename = "sellPricePerUnit")]
+    pub sell_price_per_unit: i32,
+    /// How much of the good is available at this location
+    #[serde(rename = "quantityAvailable")]
+    pub quantity_available: i32,
 }
 
 /// A representation of marketplace data for a location
