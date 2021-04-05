@@ -53,7 +53,7 @@ async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, u
                 username: username.to_owned(),
                 assignment,
                 location,
-                client: Client::new(client_rate_limiter, user.id.to_owned(), username.to_owned(), claimed_user.token.to_owned()),
+                client: Client::new(client_rate_limiter, user.id, username.to_owned(), claimed_user.token.to_owned()),
             }
         )
     }
@@ -132,7 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // 2. if the user doesn't have any ships then buy the fastest one that the user can afford
-            if current_user_info.user.ships.len() == 0 {
+            if current_user_info.user.ships.is_empty() {
                 let available_ships = scout.client.get_ships_for_sale().await?;
                 let mut fastest_ship = None;
                 let mut fastest_ship_speed = 0;
@@ -159,7 +159,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             println!("Scout {} -- Found {} ships for user {}", scout.username, current_user_info.user.ships.len(), scout.username);
-            if current_user_info.user.ships.len() > 0 {
+            if current_user_info.user.ships.is_empty() {
                 let ship = current_user_info.user.ships.get(0).unwrap();
                 let assigned_location = scout.location.clone().unwrap();
                 let system_location = scout.client.get_location_info(assigned_location.clone()).await?;

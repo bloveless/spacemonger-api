@@ -30,12 +30,12 @@ pub async fn get_db_pool(host: String, port: i32, username: String, password: St
 }
 
 pub async fn run_migrations(pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
-    Ok(
-        sqlx::migrate!("./migrations")
-            .run(&pg_pool)
-            .await
-            .expect("Failed to migrate database")
-    )
+    sqlx::migrate!("./migrations")
+        .run(&pg_pool)
+        .await
+        .expect("Failed to migrate database");
+
+    Ok(())
 }
 
 pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<User>, Box<dyn std::error::Error>> {

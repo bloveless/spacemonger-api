@@ -36,7 +36,7 @@ pub async fn get_fastest_ship(client: &Client) -> Result<Option<shared::Ship>, B
     for ship in user_info.user.ships {
         if ship.speed > fastest_ship_speed {
             fastest_ship = Some(ship.to_owned());
-            fastest_ship_speed = ship.speed.clone();
+            fastest_ship_speed = ship.speed;
         }
     }
 
@@ -67,7 +67,7 @@ pub async fn scan_system(client: &Client, ship: shared::Ship, pg_pool: db::PgPoo
         let purchase_order_response = client.create_purchase_order(
             ship.clone(),
             shared::Good::Fuel,
-            ship.max_cargo.clone() - ship_cargo_count,
+            ship.max_cargo - ship_cargo_count,
         ).await?;
 
         println!("Fill up ship ------------------------------------------------------------------");
