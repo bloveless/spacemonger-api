@@ -10,8 +10,6 @@ use std::convert::{TryInto, TryFrom};
 use spacetraders::shared::{LoanType, Good};
 use chrono::Utc;
 
-const BASE_ACCOUNT_NAME: &str = "bloveless-dev6";
-
 #[derive(Debug)]
 struct User {
     username: String,
@@ -69,6 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
     // let args: Vec<String> = env::args().collect();
+    let username_base = env::var("USERNAME_BASE").unwrap();
     let postgres_host = env::var("POSTGRES_HOST").unwrap();
     let postgres_port = env::var("POSTGRES_PORT").unwrap().parse::<i32>().unwrap();
     let postgres_username = env::var("POSTGRES_USERNAME").unwrap();
@@ -85,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let game_rate_limiter = client::get_rate_limiter();
 
-    let main_user = get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-main", BASE_ACCOUNT_NAME), "main".to_string(), None, None).await?;
+    let main_user = get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await?;
 
     let system_info = main_user.client.get_systems_info().await?;
 
@@ -114,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let scout_user = get_user(
                 game_rate_limiter.clone(),
                 pg_pool.clone(),
-                format!("{}-scout-{}", BASE_ACCOUNT_NAME, location.symbol),
+                format!("{}-scout-{}", username_base, location.symbol),
                 "scout".to_string(),
                 Some(system.symbol.to_owned()),
                 Some(location.symbol.to_owned()),

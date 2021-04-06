@@ -1,7 +1,7 @@
 use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Pool, Postgres, Row};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 pub type PgPool = Pool<Postgres>;
 

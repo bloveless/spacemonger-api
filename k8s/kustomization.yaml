@@ -1,4 +1,4 @@
 resources:
 - namespace.yaml
 - secrets.yaml
-- jobs.yaml
+- pod.yaml

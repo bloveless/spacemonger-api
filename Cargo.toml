@@ -15,8 +15,7 @@ path = "src/main.rs"
 [dependencies]
 spacetraders = { path = "spacetraders" }
 tokio = { version = "1", features = [ "full" ] }
-tokio-postgres = { version = "0.7.0", features = [ "with-chrono-0_4" ] }
 chrono = { version = "0.4.19", features = [ "serde" ] }
 dotenv = "0.15.0"
-sqlx = { version = "0.5.1", features = [ "runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate" ] }
+sqlx = { version = "0.5.1", features = [ "runtime-tokio-native-tls", "postgres", "uuid", "chrono", "migrate" ] }
 futures = "0.3.13"

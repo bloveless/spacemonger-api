@@ -25,7 +25,7 @@ pub fn get_rate_limiter() -> ClientRateLimiter {
 /// # Arguments
 ///
 /// * `response_text` - A string containing the JSON response to be parsed
-fn parse_response<'a, T: Deserialize<'a>>(response_text: &'a String) -> Result<T, anyhow::Error> {
+fn parse_response<'a, T: Deserialize<'a>>(response_text: &'a str) -> Result<T, anyhow::Error> {
     match serde_json::from_str::<T>(&response_text) {
         Ok(o) => Ok(o),
         Err(e) => {
@@ -52,7 +52,7 @@ pub async fn claim_username(username: String) -> Result<responses::ClaimUsername
         .send().await?
         .text().await?;
 
-    println!("ResponseText: {}", response_text.to_owned());
+    println!("ResponseText: {}", response_text);
 
     parse_response::<responses::ClaimUsername>(&response_text)
 }
@@ -80,7 +80,7 @@ impl Client {
         let mut default_headers = reqwest::header::HeaderMap::new();
         default_headers.insert(
             "Authorization",
-            format!("Bearer {}", &token).to_string().parse().unwrap(),
+            format!("Bearer {}", &token).parse().unwrap(),
         );
 
         let client = reqwest::ClientBuilder::new()
