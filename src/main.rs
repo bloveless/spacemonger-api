@@ -10,17 +10,18 @@ use std::convert::{TryInto, TryFrom};
 use spacetraders::shared::{LoanType, Good};
 use chrono::Utc;
 
-const BASE_ACCOUNT_NAME: &str = "bloveless-dev5";
+const BASE_ACCOUNT_NAME: &str = "bloveless-dev6";
 
 #[derive(Debug)]
 struct User {
     username: String,
     assignment: String,
-    location: Option<String>,
+    system_symbol: Option<String>,
+    location_symbol: Option<String>,
     client: Client,
 }
 
-async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, username: String, assignment: String, location: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
+async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, username: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
     let db_user = db::get_user(pg_pool.clone(), username.to_owned()).await?;
 
     if let Some(user) = db_user {
@@ -29,7 +30,8 @@ async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, u
             User {
                 username,
                 assignment,
-                location,
+                system_symbol,
+                location_symbol,
                 client: Client::new(client_rate_limiter, user.id, user.username, user.token),
             }
         )
@@ -44,7 +46,8 @@ async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, u
             username.to_owned(),
             claimed_user.token.to_owned(),
             assignment.to_owned(),
-            location.to_owned()
+            system_symbol.to_owned(),
+            location_symbol.to_owned(),
         ).await?;
 
         println!("New user persisted");
@@ -53,7 +56,8 @@ async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, u
             User {
                 username: username.to_owned(),
                 assignment,
-                location,
+                system_symbol,
+                location_symbol,
                 client: Client::new(client_rate_limiter, user.id, username.to_owned(), claimed_user.token.to_owned()),
             }
         )
@@ -81,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let game_rate_limiter = client::get_rate_limiter();
 
-    let main_user = get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-main", BASE_ACCOUNT_NAME), "main".to_string(), None).await?;
+    let main_user = get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-main", BASE_ACCOUNT_NAME), "main".to_string(), None, None).await?;
 
     let system_info = main_user.client.get_systems_info().await?;
 
@@ -106,22 +110,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut scouts: Vec<User> = Vec::new();
 
     for system in &system_info.systems {
-        // TODO: We only support one system right now
-        if system.symbol == "XV" {
-            for location in &system.locations {
-                let scout_user = get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-scout-{}", BASE_ACCOUNT_NAME, location.symbol), "scout".to_string(), Some(location.symbol.to_owned())).await?;
+        for location in &system.locations {
+            let scout_user = get_user(
+                game_rate_limiter.clone(),
+                pg_pool.clone(),
+                format!("{}-scout-{}", BASE_ACCOUNT_NAME, location.symbol),
+                "scout".to_string(),
+                Some(system.symbol.to_owned()),
+                Some(location.symbol.to_owned()),
+            ).await?;
 
-                scouts.push(scout_user);
-
-                // TODO: Remove this when we are ready to test more than one scout
-                break;
-            }
+            scouts.push(scout_user);
         }
     }
 
-    println!("Main user info: {:?}",  main_user.client.get_user_info().await?);
+    println!("Main user info: {:?}", main_user.client.get_user_info().await?);
 
-    let mut handles = vec![];
+    let mut handles = Vec::new();
 
     for scout in scouts {
         let pg_pool = pg_pool.clone();
@@ -135,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 current_user_info = scout.client.request_new_loan(LoanType::Startup).await?;
             }
 
-            // 2. if the user doesn't have any ships then buy the fastest one that the user can afford
+            // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
             if current_user_info.user.ships.is_empty() {
                 let available_ships = scout.client.get_ships_for_sale().await?;
                 let mut fastest_ship = None;
@@ -145,7 +150,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 for available_ship in &available_ships.ships {
                     for purchase_location in &available_ship.purchase_locations {
-                        if available_ship.speed > fastest_ship_speed && current_user_info.user.credits > purchase_location.price {
+                        if available_ship.speed > fastest_ship_speed
+                            && current_user_info.user.credits > purchase_location.price
+                            && purchase_location.location.contains(&scout.system_symbol.clone().unwrap())
+                        {
                             fastest_ship_speed = available_ship.speed;
                             fastest_ship = Some(available_ship);
                             fastest_ship_location = purchase_location.location.to_owned();
@@ -165,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Scout {} -- Found {} ships for user {}", scout.username, current_user_info.user.ships.len(), scout.username);
             if !current_user_info.user.ships.is_empty() {
                 let mut ship = current_user_info.user.ships.get(0).unwrap();
-                let assigned_location = scout.location.clone().unwrap();
+                let assigned_location = scout.location_symbol.clone().unwrap();
                 let system_location = scout.client.get_location_info(assigned_location.clone()).await?;
 
                 if ship.location == None {
@@ -196,7 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // if the scout isn't at it's assigned location then send it there
                 // TODO: the ship could be currently moving if I've restarted
                 //       I should look up the flight plan and see if the ship is in flight
-                if ship.location.clone() != scout.location {
+                if ship.location.clone() != scout.location_symbol {
                     println!("Scout {} -- moving to location {}", scout.username, assigned_location);
 
                     // If the ship has any space available fill it up with fuel
@@ -209,7 +217,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         &scout.client,
                         pg_pool.clone(),
                         ship,
-                        scout.location.unwrap())
+                        scout.location_symbol.unwrap())
                         .await
                         .expect("Unable to create flight plan");
 

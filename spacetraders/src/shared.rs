@@ -69,6 +69,12 @@ pub enum Good {
     /// Exotic Plasma
     #[serde(rename = "EXOTIC_PLASMA")]
     ExoticPlasma,
+    /// Unstable Compounds
+    #[serde(rename = "UNSTABLE_COMPOUNDS")]
+    UnstableCompounds,
+    /// Protein Synthesizers
+    #[serde(rename = "PROTEIN_SYNTHESIZERS")]
+    ProteinSynthesizers,
 }
 
 impl fmt::Display for Good {

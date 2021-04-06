@@ -13,12 +13,13 @@ pub struct Ship {
 }
 
 #[derive(Debug)]
-pub struct User {
+pub struct DbUser {
     pub id: String,
     pub username: String,
     pub token: String,
     pub assignment: String,
-    pub location: Option<String>,
+    pub system_symbol: Option<String>,
+    pub location_symbol: Option<String>,
 }
 
 pub async fn get_db_pool(host: String, port: i32, username: String, password: String, database: String) -> Result<PgPool, Box<dyn std::error::Error>> {
@@ -39,21 +40,22 @@ pub async fn run_migrations(pg_pool: PgPool) -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
-pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<User>, Box<dyn std::error::Error>> {
+pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<DbUser>, Box<dyn std::error::Error>> {
     Ok(
         sqlx::query("
-            SELECT id::text, username, token, assignment, location FROM users
+            SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM users
             WHERE username = $1
             LIMIT 1;
         ")
             .bind(&username)
             .map(|row: PgRow| {
-                User {
+                DbUser {
                     id: row.get("id"),
                     username: row.get("username"),
                     token: row.get("token"),
                     assignment: row.get("assignment"),
-                    location: row.get("location"),
+                    system_symbol: row.get("system_symbol"),
+                    location_symbol: row.get("location_symbol"),
                 }
             })
             .fetch_optional(&pg_pool)
@@ -61,24 +63,26 @@ pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<User>,
     )
 }
 
-pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: String, location: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
+pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<DbUser, Box<dyn std::error::Error>> {
     Ok(
         sqlx::query("
-            INSERT INTO users (username, token, assignment, location)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id::text, username, token, assignment, location;
+            INSERT INTO users (username, token, assignment, system_symbol, location_symbol)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id::text, username, token, assignment, system_symbol, location_symbol;
         ")
             .bind(&username)
             .bind(&token)
             .bind(&assignment)
-            .bind(&location)
+            .bind(&system_symbol)
+            .bind(&location_symbol)
             .map(|row: PgRow| {
-                User {
+                DbUser {
                     id: row.get("id"),
                     username: row.get("username"),
                     token: row.get("token"),
                     assignment: row.get("assignment"),
-                    location: row.get("location"),
+                    system_symbol: row.get("system_symbol"),
+                    location_symbol: row.get("location_symbol"),
                 }
             })
             .fetch_one(&pg_pool)
@@ -195,14 +199,16 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Res
 
 pub async fn persist_market_data(pg_pool: PgPool, location: &shared::SystemsInfoLocation, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
-        INSERT INTO market_data(planet_symbol, good_symbol, price_per_unit, volume_per_unit, available)
-        VALUES ($1, $2, $3, $4, $5);
+        INSERT INTO market_data(location_symbol, good_symbol, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
+        VALUES ($1, $2, $3, $4, $5, $6, $7);
     ")
         .bind(&location.symbol)
         .bind(&marketplace_data.symbol.to_string())
         .bind(&marketplace_data.price_per_unit)
         .bind(&marketplace_data.volume_per_unit)
         .bind(&marketplace_data.quantity_available)
+        .bind(&marketplace_data.purchase_price_per_unit)
+        .bind(&marketplace_data.sell_price_per_unit)
         .execute(&pg_pool)
         .await?;
 
