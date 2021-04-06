@@ -63,8 +63,12 @@ pub enum Good {
     /// Ship plating
     #[serde(rename = "SHIP_PLATING")]
     ShipPlating,
+    /// Fusion Reactors
     #[serde(rename = "FUSION_REACTORS")]
     FusionReactors,
+    /// Exotic Plasma
+    #[serde(rename = "EXOTIC_PLASMA")]
+    ExoticPlasma,
 }
 
 impl fmt::Display for Good {

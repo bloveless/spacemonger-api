@@ -1,6 +1,7 @@
 use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Pool, Postgres, Row};
+use chrono::{DateTime, Utc};
 
 pub type PgPool = Pool<Postgres>;
 
@@ -93,9 +94,9 @@ pub async fn truncate_system_info(pg_pool: PgPool) -> Result<(), Box<dyn std::er
 
 pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsInfoData, location: &shared::SystemsInfoLocation) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
-        INSERT INTO system_info(system, system_name, location, location_name, location_type, x, y)
+        INSERT INTO system_info(system_symbol, system_name, location_symbol, location_name, location_type, x, y)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT ON CONSTRAINT unique_system_info_system_location
+        ON CONFLICT ON CONSTRAINT unique_system_info_system_symbol_location_symbol
         DO UPDATE SET
             system_name = $2,
             location_name = $4,
@@ -118,11 +119,24 @@ pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsIn
 
 pub async fn persist_flight_plan(pg_pool: PgPool, user_id: String, ship: &shared::Ship, flight_plan: &responses::FlightPlan) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
-        INSERT INTO flight_plans (ship_id, flight_plan_id, origin, destination, ship_cargo_volume, ship_cargo_volume_max, distance, fuel_consumed, fuel_remaining, time_remaining_in_seconds, arrives_at, user_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+        INSERT INTO flight_plans (
+             flight_plan_id
+            ,user_id
+            ,ship_id
+            ,origin
+            ,destination
+            ,ship_cargo_volume
+            ,ship_cargo_volume_max
+            ,distance
+            ,fuel_consumed
+            ,fuel_remaining
+            ,time_remaining_in_seconds
+            ,arrives_at
+        ) VALUES ($1, uuid($2), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
     ")
-        .bind(&ship.id)
         .bind(&flight_plan.flight_plan.id)
+        .bind(&user_id)
+        .bind(&ship.id)
         .bind(&flight_plan.flight_plan.departure)
         .bind(&flight_plan.flight_plan.destination)
         .bind(&ship.cargo.iter().fold(0, |sum, cargo| sum + cargo.total_volume))
@@ -132,11 +146,51 @@ pub async fn persist_flight_plan(pg_pool: PgPool, user_id: String, ship: &shared
         .bind(&flight_plan.flight_plan.fuel_remaining)
         .bind(&flight_plan.flight_plan.time_remaining_in_seconds)
         .bind(&flight_plan.flight_plan.arrives_at)
-        .bind(&user_id)
         .execute(&pg_pool)
         .await?;
 
     Ok(())
+}
+
+pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Result<Option<shared::FlightPlanData>, Box<dyn std::error::Error>> {
+    Ok(
+        sqlx::query("
+            SELECT
+                 flight_plan_id
+                ,ship_id
+                ,origin
+                ,destination
+                ,fuel_consumed
+                ,fuel_remaining
+                ,time_remaining_in_seconds
+                ,created_at
+                ,distance
+                ,arrives_at
+                ,user_id
+            FROM flight_plans
+            WHERE ship_id = $1
+                AND arrives_at > $2
+        ")
+        .bind(&ship.id)
+        .bind(&Utc::now())
+        .map(|row: PgRow| {
+            shared::FlightPlanData {
+                id: row.get("flight_plan_id"),
+                ship_id: row.get("ship_id"),
+                fuel_consumed: row.get("fuel_consumed"),
+                fuel_remaining: row.get("fuel_remaining"),
+                time_remaining_in_seconds: row.get("time_remaining_in_seconds"),
+                created_at: row.get("created_at"),
+                arrives_at: row.get("arrives_at"),
+                terminated_at: None,
+                destination: row.get("destination"),
+                departure: row.get("origin"),
+                distance: row.get("distance"),
+            }
+        })
+        .fetch_optional(&pg_pool)
+        .await?
+    )
 }
 
 pub async fn persist_market_data(pg_pool: PgPool, location: &shared::SystemsInfoLocation, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {

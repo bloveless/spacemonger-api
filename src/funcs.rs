@@ -4,10 +4,10 @@ use tokio::time::Duration;
 use std::convert::TryFrom;
 use crate::db;
 
-pub async fn create_flight_plan(client: &Client, pg_pool: db::PgPool, user_id: String, ship: &shared::Ship, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
+pub async fn create_flight_plan(client: &Client, pg_pool: db::PgPool, ship: &shared::Ship, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
     let flight_plan = client.create_flight_plan(ship.id.to_owned(), destination.to_owned()).await?;
 
-    db::persist_flight_plan(pg_pool, user_id, ship, &flight_plan).await?;
+    db::persist_flight_plan(pg_pool, client.user_id.clone(), ship, &flight_plan).await?;
 
     Ok(flight_plan)
 }
@@ -82,7 +82,7 @@ pub async fn scan_system(client: &Client, ship: shared::Ship, pg_pool: db::PgPoo
 
             // Don't attempt to fly to a location that the ship is already at
             if ship.clone().location != Some(location.symbol.clone()) {
-                let flight_plan = create_flight_plan(client, pg_pool.clone(), client.user_id.to_owned(), &ship, location.symbol.clone()).await?;
+                let flight_plan = create_flight_plan(client, pg_pool.clone(), &ship, location.symbol.clone()).await?;
                 println!("Flight plan: {:?}", &flight_plan);
 
                 println!("Waiting for {} seconds", flight_plan.flight_plan.time_remaining_in_seconds + 5);

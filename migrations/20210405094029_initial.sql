@@ -35,9 +35,9 @@ CREATE TABLE flight_plans (
 );
 
 CREATE TABLE system_info (
-     system VARCHAR(100) NOT NULL
+     system_symbol VARCHAR(100) NOT NULL
     ,system_name VARCHAR(100) NOT NULL
-    ,location VARCHAR(100) NOT NULL
+    ,location_symbol VARCHAR(100) NOT NULL
     ,location_name VARCHAR(100) NOT NULL
     ,location_type VARCHAR(100) NOT NULL
     ,x INT NOT NULL
@@ -46,8 +46,8 @@ CREATE TABLE system_info (
 );
 
 CREATE UNIQUE INDEX idx_system_info_system_location
-    ON system_info (system, location);
+    ON system_info (system_symbol, location_symbol);
 
 ALTER TABLE system_info
-    ADD CONSTRAINT unique_system_info_system_location
+    ADD CONSTRAINT unique_system_info_system_symbol_location_symbol
     UNIQUE USING INDEX idx_system_info_system_location;

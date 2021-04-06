@@ -6,10 +6,11 @@ use std::env;
 use dotenv::dotenv;
 use spacetraders::client::ClientRateLimiter;
 use tokio::time::Duration;
-use std::convert::TryInto;
+use std::convert::{TryInto, TryFrom};
 use spacetraders::shared::{LoanType, Good};
+use chrono::Utc;
 
-const BASE_ACCOUNT_NAME: &str = "bloveless-dev";
+const BASE_ACCOUNT_NAME: &str = "bloveless-dev5";
 
 #[derive(Debug)]
 struct User {
@@ -111,6 +112,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let scout_user = get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-scout-{}", BASE_ACCOUNT_NAME, location.symbol), "scout".to_string(), Some(location.symbol.to_owned())).await?;
 
                 scouts.push(scout_user);
+
+                // TODO: Remove this when we are ready to test more than one scout
+                break;
             }
         }
     }
@@ -159,10 +163,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             println!("Scout {} -- Found {} ships for user {}", scout.username, current_user_info.user.ships.len(), scout.username);
-            if current_user_info.user.ships.is_empty() {
-                let ship = current_user_info.user.ships.get(0).unwrap();
+            if !current_user_info.user.ships.is_empty() {
+                let mut ship = current_user_info.user.ships.get(0).unwrap();
                 let assigned_location = scout.location.clone().unwrap();
                 let system_location = scout.client.get_location_info(assigned_location.clone()).await?;
+
+                if ship.location == None {
+                    println!("Scout {} -- is currently in motion...", scout.username);
+
+                    // search for any stored flight plans that are valid for this scout.
+                    let flight_plan = db::get_active_flight_plan(pg_pool.clone(), ship)
+                        .await.expect("Unable to get active flight plans");
+
+                    if let Some(flight_plan) = flight_plan {
+                        println!("Scout {} -- current flight plan {:?}", scout.username, flight_plan);
+
+                        // Adding 5 seconds here just to give the flight plan a little buffer
+                        let remaining_seconds = (flight_plan.arrives_at - Utc::now()).num_seconds() + 5;
+
+                        println!("Scout {} -- {} seconds remaining in flight plan... waiting", scout.username, remaining_seconds);
+                        if remaining_seconds > 0 {
+                            tokio::time::sleep(Duration::from_secs(
+                                u64::try_from(remaining_seconds).expect("Invalid remaining seconds encountered")
+                            )).await;
+                        }
+
+                        current_user_info = scout.client.get_user_info().await?;
+                        ship = current_user_info.user.ships.get(0).unwrap();
+                    }
+                }
 
                 // if the scout isn't at it's assigned location then send it there
                 // TODO: the ship could be currently moving if I've restarted
@@ -176,7 +205,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         scout.client.create_purchase_order(ship.to_owned(), Good::Fuel, ship.space_available).await?;
                     }
 
-                    let flight_plan = scout.client.create_flight_plan(ship.id.clone(), scout.location.clone().unwrap()).await?;
+                    let flight_plan = funcs::create_flight_plan(
+                        &scout.client,
+                        pg_pool.clone(),
+                        ship,
+                        scout.location.unwrap())
+                        .await
+                        .expect("Unable to create flight plan");
 
                     let flight_seconds = flight_plan.flight_plan.time_remaining_in_seconds + 5;
                     println!("Scout {} -- waiting for {} seconds", scout.username, flight_seconds);
@@ -194,11 +229,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Scout {} -- at {} received marketplace data {:?}", scout.username, assigned_location, marketplace_data);
 
                     for datum in marketplace_data.location.marketplace {
-                        let market_data_result = db::persist_market_data(pg_pool.clone(), &system_location.location, &datum).await;
-                        match market_data_result {
-                            Ok(_) => println!("Market data saved successfully"),
-                            Err(e) => panic!("Unable to save market data: {}", e),
-                        }
+                        db::persist_market_data(pg_pool.clone(), &system_location.location, &datum)
+                            .await.expect("Unable to save market data");
                     }
 
                     println!("Scout {} -- is waiting for 10 minutes to get another round of data", scout.username);
