@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE users (
+CREATE TABLE daemon.users (
      id UUID DEFAULT uuid_generate_v4()
     ,username VARCHAR(100) NOT NULL UNIQUE
     ,token VARCHAR(100) NOT NULL
@@ -9,7 +9,7 @@ CREATE TABLE users (
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-CREATE TABLE market_data (
+CREATE TABLE daemon.market_data (
      planet_symbol VARCHAR(100) NOT NULL
     ,good_symbol VARCHAR(100) NOT NULL
     ,price_per_unit INT NOT NULL
@@ -18,7 +18,7 @@ CREATE TABLE market_data (
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-CREATE TABLE flight_plans (
+CREATE TABLE daemon.flight_plans (
      flight_plan_id VARCHAR(100) NOT NULL PRIMARY KEY
     ,user_id UUID NOT NULL
     ,ship_id VARCHAR(100) NOT NULL
@@ -34,7 +34,7 @@ CREATE TABLE flight_plans (
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-CREATE TABLE system_info (
+CREATE TABLE daemon.system_info (
      system_symbol VARCHAR(100) NOT NULL
     ,system_name VARCHAR(100) NOT NULL
     ,location_symbol VARCHAR(100) NOT NULL
@@ -46,8 +46,8 @@ CREATE TABLE system_info (
 );
 
 CREATE UNIQUE INDEX idx_system_info_system_location
-    ON system_info (system_symbol, location_symbol);
+    ON daemon.system_info (system_symbol, location_symbol);
 
-ALTER TABLE system_info
+ALTER TABLE daemon.system_info
     ADD CONSTRAINT unique_system_info_system_symbol_location_symbol
     UNIQUE USING INDEX idx_system_info_system_location;

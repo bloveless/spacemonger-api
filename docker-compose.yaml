@@ -1,14 +1,23 @@
 version: "3.8"
 
 services:
-  spacetraders:
-    image: bloveless/spacetraders:0.1.0-alpha.3
+  spacetraders-api:
     build:
       context: .
-      dockerfile: Dockerfile
-#      target: builder
+      dockerfile: docker/api/Dockerfile
     env_file:
       - ./.env
+    depends_on:
+      - postgres
+
+  spacetradersd:
+    build:
+      context: .
+      dockerfile: docker/daemon/Dockerfile
+    env_file:
+      - ./.env
+    depends_on:
+      - postgres
     command:
       - watch
       - scan-system
@@ -22,7 +31,7 @@ services:
     ports:
       - 5433:5432
     volumes:
-    - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
 
 volumes:
   pg_data:

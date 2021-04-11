@@ -1,21 +1,2 @@
-[package]
-name = "spacetraders-rs"
-version = "0.1.0"
-authors = ["Brennon Loveless <brennon.loveless@gmail.com>"]
-edition = "2018"
-
 [workspace]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[[bin]]
-name = "spacetraders-rs"
-path = "src/main.rs"
-
-[dependencies]
-spacetraders = { path = "spacetraders" }
-tokio = { version = "1", features = [ "full" ] }
-chrono = { version = "0.4.19", features = [ "serde" ] }
-dotenv = "0.15.0"
-sqlx = { version = "0.5.1", features = [ "runtime-tokio-native-tls", "postgres", "uuid", "chrono", "migrate" ] }
-futures = "0.3.13"
+members = ["daemon", "api"]

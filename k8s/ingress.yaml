@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spacetraders-api-ingress
+  namespace: spacetraders
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - spacetraders-api.brennonloveless.com
+      secretName: spacetraders-api-crt
+  rules:
+    - host: spacetraders-api.brennonloveless.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: spacetraders-api-service
+                port:
+                  number: 8080

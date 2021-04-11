@@ -1,4 +1,11 @@
+namespace: spacetraders
+
+commonLabels:
+  app: spacetraders
+
 resources:
 - namespace.yaml
 - secrets.yaml
 - pod.yaml
+- service.yaml
+- ingress.yaml

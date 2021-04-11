@@ -9,64 +9,12 @@ use tokio::time::Duration;
 use std::convert::{TryInto, TryFrom};
 use spacetraders::shared::{LoanType, Good};
 use chrono::Utc;
-
-#[derive(Debug)]
-struct User {
-    username: String,
-    assignment: String,
-    system_symbol: Option<String>,
-    location_symbol: Option<String>,
-    client: Client,
-}
-
-async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, username: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
-    let db_user = db::get_user(pg_pool.clone(), username.to_owned()).await?;
-
-    if let Some(user) = db_user {
-        println!("Found existing user {}", username);
-        Ok(
-            User {
-                username,
-                assignment,
-                system_symbol,
-                location_symbol,
-                client: Client::new(client_rate_limiter, user.id, user.username, user.token),
-            }
-        )
-    } else {
-        println!("Creating new user {}", username);
-        let claimed_user = client::claim_username(username.to_owned()).await?;
-
-        println!("Claimed new user {:?}", claimed_user);
-
-        let user = db::persist_user(
-            pg_pool.clone(),
-            username.to_owned(),
-            claimed_user.token.to_owned(),
-            assignment.to_owned(),
-            system_symbol.to_owned(),
-            location_symbol.to_owned(),
-        ).await?;
-
-        println!("New user persisted");
-
-        Ok(
-            User {
-                username: username.to_owned(),
-                assignment,
-                system_symbol,
-                location_symbol,
-                client: Client::new(client_rate_limiter, user.id, username.to_owned(), claimed_user.token.to_owned()),
-            }
-        )
-    }
-}
+use spacetraders::responses::User;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    // let args: Vec<String> = env::args().collect();
     let username_base = env::var("USERNAME_BASE").unwrap();
     let postgres_host = env::var("POSTGRES_HOST").unwrap();
     let postgres_port = env::var("POSTGRES_PORT").unwrap().parse::<i32>().unwrap();
@@ -84,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let game_rate_limiter = client::get_rate_limiter();
 
-    let main_user = get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await?;
+    let main_user = funcs::get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await?;
 
     let system_info = main_user.client.get_systems_info().await?;
 
@@ -106,11 +54,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("## End System Messages ------------------------------------------------------------");
 
-    let mut scouts: Vec<User> = Vec::new();
+    let mut scouts: Vec<funcs::User> = Vec::new();
 
     for system in &system_info.systems {
         for location in &system.locations {
-            let scout_user = get_user(
+            let scout_user = funcs::get_user(
                 game_rate_limiter.clone(),
                 pg_pool.clone(),
                 format!("{}-scout-{}", username_base, location.symbol),
@@ -175,6 +123,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let assigned_location = scout.location_symbol.clone().unwrap();
                 let system_location = scout.client.get_location_info(assigned_location.clone()).await?;
 
+                // If the ship is currently in motion then look up it's flight plan and wait for
+                // the remaining type before continuing
                 if ship.location == None {
                     println!("Scout {} -- is currently in motion...", scout.username);
 
@@ -201,8 +151,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // if the scout isn't at it's assigned location then send it there
-                // TODO: the ship could be currently moving if I've restarted
-                //       I should look up the flight plan and see if the ship is in flight
                 if ship.location.clone() != scout.location_symbol {
                     println!("Scout {} -- moving to location {}", scout.username, assigned_location);
 

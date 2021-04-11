@@ -1,8 +1,61 @@
-use spacetraders::client::Client;
-use spacetraders::{shared, responses};
+use spacetraders::client::{Client, ClientRateLimiter};
+use spacetraders::{shared, responses, client};
 use tokio::time::Duration;
 use std::convert::TryFrom;
 use crate::db;
+
+#[derive(Debug)]
+pub(crate) struct User {
+    pub(crate) username: String,
+    assignment: String,
+    pub(crate) system_symbol: Option<String>,
+    pub(crate) location_symbol: Option<String>,
+    pub(crate) client: Client,
+}
+
+pub(crate) async fn get_user(client_rate_limiter: ClientRateLimiter, pg_pool: db::PgPool, username: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
+    let db_user = db::get_user(pg_pool.clone(), username.to_owned()).await?;
+
+    if let Some(user) = db_user {
+        println!("Found existing user {}", username);
+        Ok(
+            User {
+                username,
+                assignment,
+                system_symbol,
+                location_symbol,
+                client: Client::new(client_rate_limiter, user.id, user.username, user.token),
+            }
+        )
+    } else {
+        println!("Creating new user {}", username);
+        let claimed_user = client::claim_username(username.to_owned()).await?;
+
+        println!("Claimed new user {:?}", claimed_user);
+
+        let user = db::persist_user(
+            pg_pool.clone(),
+            username.to_owned(),
+            claimed_user.token.to_owned(),
+            assignment.to_owned(),
+            system_symbol.to_owned(),
+            location_symbol.to_owned(),
+        ).await?;
+
+        println!("New user persisted");
+
+        Ok(
+            User {
+                username: username.to_owned(),
+                assignment,
+                system_symbol,
+                location_symbol,
+                client: Client::new(client_rate_limiter, user.id, username.to_owned(), claimed_user.token.to_owned()),
+            }
+        )
+    }
+}
+
 
 pub async fn create_flight_plan(client: &Client, pg_pool: db::PgPool, ship: &shared::Ship, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
     let flight_plan = client.create_flight_plan(ship.id.to_owned(), destination.to_owned()).await?;
@@ -15,8 +68,6 @@ pub async fn create_flight_plan(client: &Client, pg_pool: db::PgPool, ship: &sha
 pub async fn get_systems(client: &Client, pg_pool: db::PgPool) -> Result<responses::SystemsInfo, Box<dyn std::error::Error>> {
     let systems_info = client.get_systems_info().await?;
     println!("Systems info: {:?}", systems_info);
-
-    db::truncate_system_info(pg_pool.clone()).await?;
 
     for system in &systems_info.systems {
         for location in &system.locations {

@@ -1,20 +1,18 @@
 FROM rust:1.50-buster as builder
 
-RUN mkdir -p /app/spacetraders
-
 RUN cargo install cargo-watch
 
 WORKDIR /app/
 
 COPY ./ /app/
 
-RUN cargo build --release
+RUN cargo build --release --package spacetraders-api --bin spacetraders-api
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 FROM debian:buster
 
-RUN mkdir -p /app/migrations \
+RUN mkdir -p /app \
     && useradd -ms /bin/bash spacetraders \
     && chown -R spacetraders:spacetraders /app \
     && apt-get update \
@@ -25,8 +23,7 @@ WORKDIR /app
 
 USER spacetraders
 
-COPY --from=builder --chown=spacetraders:spacetraders /app/target/release/spacetraders-rs /app/
-COPY --chown=spacetraders:spacetraders ./entrypoint.sh /app/
-COPY --chown=spacetraders:spacetraders ./migrations /app/migrations/
+COPY --from=builder --chown=spacetraders:spacetraders /app/target/release/spacetraders-api /app/
+COPY --chown=spacetraders:spacetraders ./docker/api/entrypoint.sh /app/
 
 ENTRYPOINT ["/app/entrypoint.sh"]
