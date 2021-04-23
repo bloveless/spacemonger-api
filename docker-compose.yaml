@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  spacetraders-api:
+  spacemonger-api:
     build:
       context: .
       dockerfile: docker/api/Dockerfile
@@ -10,7 +10,7 @@ services:
     depends_on:
       - postgres
 
-  spacetradersd:
+  spacemongerd:
     build:
       context: .
       dockerfile: docker/daemon/Dockerfile
@@ -25,13 +25,14 @@ services:
   postgres:
     image: postgres:13
     environment:
-      POSTGRES_USER: spacetraders
-      POSTGRES_DB: spacetraders
+      POSTGRES_USER: spacemonger
+      POSTGRES_DB: spacemonger
       POSTGRES_PASSWORD: 2djlsUYwcF0YzSgvTZPc9BCWff
     ports:
       - 5433:5432
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/initdb.d:/docker-entrypoint-initdb.d
 
 volumes:
   pg_data:

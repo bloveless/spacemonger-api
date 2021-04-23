@@ -1,7 +1,7 @@
-namespace: spacetraders
+namespace: spacemonger
 
 commonLabels:
-  app: spacetraders
+  app: spacemonger
 
 resources:
 - namespace.yaml

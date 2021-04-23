@@ -6,7 +6,14 @@ use crate::models::User;
 #[get("/users")]
 pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
     let results = sqlx::query("
-            SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM daemon.users
+            SELECT
+                 u.id::text
+                ,u.username
+                ,u.token
+                ,u.assignment
+                ,u.system_symbol
+                ,u.location_symbol
+            FROM daemon_users u
             LIMIT 1;
         ")
         .map(|row: PgRow| {

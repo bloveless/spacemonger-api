@@ -1,7 +1,8 @@
 use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
-use sqlx::{Pool, Postgres, Row, Executor, PgPool};
+use sqlx::{Row, PgPool, PgConnection, Executor};
 use chrono::Utc;
+use std::borrow::Borrow;
 
 #[derive(Debug)]
 pub struct Ship {
@@ -41,7 +42,7 @@ pub async fn run_migrations(pg_pool: PgPool) -> Result<(), Box<dyn std::error::E
 pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<DbUser>, Box<dyn std::error::Error>> {
     Ok(
         sqlx::query("
-            SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM daemon.users
+            SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM daemon_users
             WHERE username = $1
             LIMIT 1;
         ")
@@ -64,7 +65,7 @@ pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<DbUser
 pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<DbUser, Box<dyn std::error::Error>> {
     Ok(
         sqlx::query("
-            INSERT INTO daemon.users (username, token, assignment, system_symbol, location_symbol)
+            INSERT INTO daemon_users (username, token, assignment, system_symbol, location_symbol)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id::text, username, token, assignment, system_symbol, location_symbol;
         ")
@@ -90,15 +91,16 @@ pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assi
 
 pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsInfoData, location: &shared::SystemsInfoLocation) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
-        INSERT INTO daemon.system_info(system_symbol, system_name, location_symbol, location_name, location_type, x, y)
+        INSERT INTO daemon_system_info(system_symbol, system_name, location_symbol, location_name, location_type, x, y)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT ON CONSTRAINT unique_system_info_system_symbol_location_symbol
+        ON CONFLICT (system_symbol, location_symbol)
         DO UPDATE SET
             system_name = $2,
             location_name = $4,
             location_type = $5,
             x = $6,
-            y = $7;
+            y = $7,
+            created_at = timezone('utc', NOW());
     ")
         .bind(&system.symbol)
         .bind(&system.name)
@@ -115,8 +117,8 @@ pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsIn
 
 pub async fn persist_flight_plan(pg_pool: PgPool, user_id: String, ship: &shared::Ship, flight_plan: &responses::FlightPlan) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
-        INSERT INTO daemon.flight_plans (
-             flight_plan_id
+        INSERT INTO daemon_flight_plans (
+             id
             ,user_id
             ,ship_id
             ,origin
@@ -152,7 +154,7 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Res
     Ok(
         sqlx::query("
             SELECT
-                 flight_plan_id
+                 id
                 ,ship_id
                 ,origin
                 ,destination
@@ -163,35 +165,35 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Res
                 ,distance
                 ,arrives_at
                 ,user_id
-            FROM daemon.flight_plans
+            FROM daemon_flight_plans
             WHERE ship_id = $1
                 AND arrives_at > $2
         ")
-        .bind(&ship.id)
-        .bind(&Utc::now())
-        .map(|row: PgRow| {
-            shared::FlightPlanData {
-                id: row.get("flight_plan_id"),
-                ship_id: row.get("ship_id"),
-                fuel_consumed: row.get("fuel_consumed"),
-                fuel_remaining: row.get("fuel_remaining"),
-                time_remaining_in_seconds: row.get("time_remaining_in_seconds"),
-                created_at: row.get("created_at"),
-                arrives_at: row.get("arrives_at"),
-                terminated_at: None,
-                destination: row.get("destination"),
-                departure: row.get("origin"),
-                distance: row.get("distance"),
-            }
-        })
-        .fetch_optional(&pg_pool)
-        .await?
+            .bind(&ship.id)
+            .bind(&Utc::now())
+            .map(|row: PgRow| {
+                shared::FlightPlanData {
+                    id: row.get("id"),
+                    ship_id: row.get("ship_id"),
+                    fuel_consumed: row.get("fuel_consumed"),
+                    fuel_remaining: row.get("fuel_remaining"),
+                    time_remaining_in_seconds: row.get("time_remaining_in_seconds"),
+                    created_at: row.get("created_at"),
+                    arrives_at: row.get("arrives_at"),
+                    terminated_at: None,
+                    destination: row.get("destination"),
+                    departure: row.get("origin"),
+                    distance: row.get("distance"),
+                }
+            })
+            .fetch_optional(&pg_pool)
+            .await?
     )
 }
 
 pub async fn persist_market_data(pg_pool: PgPool, location: &shared::SystemsInfoLocation, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
-        INSERT INTO daemon.market_data(location_symbol, good_symbol, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
+        INSERT INTO daemon_market_data(location_symbol, good_symbol, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
         VALUES ($1, $2, $3, $4, $5, $6, $7);
     ")
         .bind(&location.symbol)

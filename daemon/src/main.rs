@@ -1,15 +1,13 @@
 mod funcs;
 mod db;
 
-use spacetraders::{client::Client, client};
+use spacetraders::client;
 use std::env;
 use dotenv::dotenv;
-use spacetraders::client::ClientRateLimiter;
 use tokio::time::Duration;
 use std::convert::{TryInto, TryFrom};
 use spacetraders::shared::{LoanType, Good};
 use chrono::Utc;
-use spacetraders::responses::User;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,9 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // in the system. Create (or get from db) X scout accounts (where X is number of locations in
     // the system). Send each scout account to the location they are assigned.
 
-    let game_rate_limiter = client::get_rate_limiter();
-
-    let main_user = funcs::get_user(game_rate_limiter.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await?;
+    let http_client = client::get_http_client();
+    let main_user = funcs::get_user(http_client.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await?;
 
     let system_info = main_user.client.get_systems_info().await?;
 
@@ -59,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for system in &system_info.systems {
         for location in &system.locations {
             let scout_user = funcs::get_user(
-                game_rate_limiter.clone(),
+                http_client.clone(),
                 pg_pool.clone(),
                 format!("{}-scout-{}", username_base, location.symbol),
                 "scout".to_string(),
@@ -111,7 +108,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if let Some(ship) = fastest_ship {
                     println!("Scout {} -- Buying {} for {} at location {}", scout.username, ship.ship_type.to_owned(), fastest_ship_price, fastest_ship_location);
-                    current_user_info = scout.client.purchase_ship(fastest_ship_location, ship.ship_type.to_owned()).await?;
+                    scout.client.purchase_ship(fastest_ship_location, ship.ship_type.to_owned()).await?;
+                    current_user_info = scout.client.get_user_info().await?;
                 } else {
                     panic!("Unable to find a ship for the user to purchase and the user doesn't currently have any ships");
                 }

@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
         .wrap(Cors::permissive())
         .wrap(middleware::NormalizePath::default())
         .wrap(Logger::default())
-        .configure(views::init)
+        .service(web::scope("/api/").configure(views::init))
         .app_data(web::Data::new(pg_pool.clone()))
     )
         .bind("0.0.0.0:8080")?

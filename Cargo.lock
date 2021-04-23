@@ -1709,20 +1709,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spacetraders"
-version = "0.1.0-alpha.4"
-dependencies = [
- "anyhow",
- "chrono",
- "governor",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "spacetraders-api"
+name = "spacemonger-api"
 version = "0.1.0"
 dependencies = [
  "actix-cors",
@@ -1737,7 +1724,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spacetraders-daemon"
+name = "spacemonger-daemon"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -1745,6 +1732,19 @@ dependencies = [
  "futures",
  "spacetraders",
  "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "spacetraders"
+version = "0.1.0-alpha.4"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "governor",
+ "reqwest",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

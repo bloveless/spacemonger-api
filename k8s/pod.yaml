@@ -1,18 +1,19 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: spacetradersd
-  namespace: spacetraders
+  name: spacemongerd
+  namespace: spacemonger
   labels:
-    component: spacetradersd
+    app: spacemonger
+    component: spacemonger
 spec:
   containers:
-  - name: spacetradersd
-    image: bloveless/spacetradersd:0.1.0-alpha.1
-    command: ["/app/spacetradersd"]
+  - name: spacemongerd
+    image: bloveless/spacemongerd:0.1.0-alpha.3
+    command: ["/app/spacemongerd"]
     envFrom:
     - secretRef:
-        name: spacetraders
+        name: spacemonger
     env:
     - name: USERNAME_BASE
       value: bloveless
@@ -21,26 +22,27 @@ spec:
     - name: POSTGRES_PORT
       value: '5432'
     - name: POSTGRES_USERNAME
-      value: spacetraders
+      value: spacemonger
     - name: POSTGRES_DATABASE
-      value: spacetraders
+      value: spacemonger
   restartPolicy: Always
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: spacetraders-api
-  namespace: spacetraders
+  name: spacemonger-api
+  namespace: spacemonger
   labels:
-    component: spacetraders-api
+    app: spacemonger
+    component: spacemonger-api
 spec:
   containers:
-    - name: spacetraders-api
-      image: bloveless/spacetraders-api:0.1.0-alpha.2
-      command: ["/app/spacetraders-api"]
+    - name: spacemonger-api
+      image: bloveless/spacemonger-api:0.1.0-alpha.3
+      command: ["/app/spacemonger-api"]
       envFrom:
         - secretRef:
-            name: spacetraders
+            name: spacemonger
       env:
         - name: USERNAME_BASE
           value: bloveless
@@ -49,7 +51,21 @@ spec:
         - name: POSTGRES_PORT
           value: '5432'
         - name: POSTGRES_USERNAME
-          value: spacetraders
+          value: spacemonger
         - name: POSTGRES_DATABASE
-          value: spacetraders
+          value: spacemonger
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spacemonger-ui
+  namespace: spacemonger
+  labels:
+    app: spacemonger
+    component: spacemonger-ui
+spec:
+  containers:
+    - name: spacemonger-ui
+      image: bloveless/spacemonger-ui:0.1.0-alpha.1
   restartPolicy: Always

@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 pub struct MarketData {
     pub id: i32,
     pub location_symbol: String,
+    pub system_symbol: String,
     pub good_symbol: String,
     pub price_per_unit: i32,
     pub volume_per_unit: i32,

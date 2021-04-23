@@ -2,20 +2,70 @@
 use crate::{responses, requests};
 use crate::shared;
 
-use reqwest::{Client as ReqwestClient};
+use reqwest;
 use serde::Deserialize;
-use governor::{RateLimiter, Quota};
-use std::num::NonZeroU32;
-use governor::{state::{NotKeyed, InMemoryState}, clock::DefaultClock};
+use tokio::sync::Mutex;
 use std::sync::Arc;
+use std::error::Error;
+use reqwest::header::{HeaderName, HeaderValue};
+use reqwest::{Method, Url};
+use std::str::FromStr;
+use tokio::time::Duration;
 
-/// An in memory rate limiter
-pub type ClientRateLimiter = Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>;
+pub type ArcHttpClient = Arc<Mutex<HttpClient>>;
 
-/// Get a rate limiter pre-configured for the limits of the spacetraders API
-pub fn get_rate_limiter() -> ClientRateLimiter {
-    let quota = Quota::per_second(NonZeroU32::new(1u32).unwrap());
-    Arc::new(RateLimiter::direct(quota))
+#[derive(Debug)]
+pub struct HttpClient {
+    client: reqwest::Client,
+}
+
+impl HttpClient {
+    fn new() -> HttpClient {
+        HttpClient {
+            client: reqwest::Client::new(),
+        }
+    }
+
+    pub fn get_request_builder(&self, method: Method, url: Url) -> reqwest::RequestBuilder {
+        self.client.request(method, url)
+    }
+
+    pub async fn execute_request(&self, request_builder: reqwest::RequestBuilder, token: Option<String>) -> Result<reqwest::Response, reqwest::Error> {
+        let mut request_builder = request_builder.try_clone().unwrap();
+        if let Some(token) = token {
+            request_builder = request_builder.header(
+                HeaderName::from_lowercase(b"authorization").unwrap(),
+                HeaderValue::from_str(format!("Bearer {}", &token).as_str()).unwrap(),
+            );
+        }
+
+        let request = request_builder.build().unwrap();
+        match self.client.execute(request.try_clone().unwrap()).await {
+            Ok(response) => {
+                // Check if the response was a throttle exception (status 429 means we have been rate limited)
+                if response.status() == 429 {
+                    let mut retry_after: f64 = response.headers()
+                        .get("retry-after").unwrap()
+                        .to_str().unwrap()
+                        .parse().unwrap();
+
+                    // If it was a throttle then wait based on the retry-after response headers
+                    println!("Rate limited... waiting for {} seconds before trying again", retry_after);
+                    tokio::time::sleep(Duration::from_secs_f64(retry_after)).await;
+
+                    // Now if there is an error then pass that error along
+                    self.client.execute(request).await
+                } else {
+                    Ok(response)
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+pub fn get_http_client() -> ArcHttpClient {
+    Arc::new(Mutex::new(HttpClient::new()))
 }
 
 /// Parse a response string into the type represented by T
@@ -45,28 +95,31 @@ fn parse_response<'a, T: Deserialize<'a>>(response_text: &'a str) -> Result<T, a
 /// # Arguments
 ///
 /// * `username` - A string containing the username to get a token for
-pub async fn claim_username(username: String) -> Result<responses::ClaimUsername, anyhow::Error> {
-    let client = reqwest::Client::new();
-    let response_text = client.post(&format!("https://api.spacetraders.io/users/{}/token", username))
-        .body("this response body doesn't matter")
-        .send().await?
-        .text().await?;
+pub async fn claim_username(http_client: ArcHttpClient, username: String) -> Result<responses::ClaimUsername, anyhow::Error> {
+    let http_client = http_client.lock().await;
+    let request_builder = http_client.get_request_builder(
+        Method::POST,
+        Url::from_str(&format!("https://api.spacetraders.io/users/{}/token", username)).unwrap(),
+    ).body("this response body doesn't matter");
+
+    let response_text = http_client.execute_request(request_builder, None).await.unwrap().text().await?;
 
     println!("ResponseText: {}", response_text);
 
     parse_response::<responses::ClaimUsername>(&response_text)
 }
 
+
 /// A game that is associated to a specific username
 #[derive(Debug)]
 pub struct Client {
-    rate_limiter: ClientRateLimiter,
-    http_client: ReqwestClient,
+    http_client: ArcHttpClient,
     /// The users spacetraders API id
     pub user_id: String,
     /// The users username
     pub username: String,
-    // pub token: String,
+    /// The uses access token
+    pub token: String,
 }
 
 impl Client {
@@ -76,24 +129,12 @@ impl Client {
     ///
     /// * `username` - A string containing the username of the current player
     /// * `token` - A string containing the access token for the username provided
-    pub fn new(rate_limiter: ClientRateLimiter, user_id: String, username: String, token: String) -> Client {
-        let mut default_headers = reqwest::header::HeaderMap::new();
-        default_headers.insert(
-            "Authorization",
-            format!("Bearer {}", &token).parse().unwrap(),
-        );
-
-        let client = reqwest::ClientBuilder::new()
-            .default_headers(default_headers)
-            .build()
-            .expect("unable to create game client");
-
+    pub fn new(http_client: ArcHttpClient, user_id: String, username: String, token: String) -> Client {
         Client {
-            rate_limiter,
-            http_client: client,
+            http_client,
             user_id,
             username,
-            // token,
+            token,
         }
     }
 
@@ -109,15 +150,16 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `flight_plan_id` - A string containing the flight plan id
-    pub async fn get_flight_plan(&self, flight_plan_id: String) -> Result<responses::FlightPlan, anyhow::Error> {
-        // let request = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, flight_plan_id))
-        //     .build().unwrap();
+    /// * `id` - A string containing the flight plan id
+    pub async fn get_flight_plan(&self, id: String) -> Result<responses::FlightPlan, anyhow::Error> {
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+            format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, id).parse().unwrap(),
+        );
 
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, flight_plan_id))
-            .send().await?
-            .text().await?;
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::FlightPlan>(&response_text)
     }
@@ -134,41 +176,57 @@ impl Client {
             destination,
         };
 
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/flight-plans", self.username).to_string())
-            .json(&flight_plan_request)
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::POST,
+            format!("https://api.spacetraders.io/users/{}/flight-plans", self.username).parse().unwrap(),
+        )
+            .json(&flight_plan_request);
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::FlightPlan>(&response_text)
     }
 
     /// Get the status of the game API.
     pub async fn get_game_status(&self) -> Result<responses::GameStatus, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get("https://api.spacetraders.io/game/status")
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+            "https://api.spacetraders.io/game/status".parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::GameStatus>(&response_text)
     }
 
     /// Get all available loans
     pub async fn get_available_loans(&self) -> Result<responses::AvailableLoans, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get("https://api.spacetraders.io/game/loans")
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+            "https://api.spacetraders.io/game/loans".parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::AvailableLoans>(&response_text)
     }
 
     /// Get any loans taken out by the current user
     pub async fn get_your_loans(&self) -> Result<responses::LoanInfo, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/loans", self.username))
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+            format!("https://api.spacetraders.io/users/{}/loans", self.username).parse().unwrap(),
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::LoanInfo>(&response_text)
     }
@@ -179,10 +237,16 @@ impl Client {
     ///
     /// * `loan_id` - A string containing the loan_id of the loan to pay off
     pub async fn pay_off_loan(&self, loan_id: String) -> Result<responses::UserInfo, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.put(&format!("https://api.spacetraders.io/users/{}/loans/{}", self.username, loan_id).to_string())
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::PUT,
+            format!("https://api.spacetraders.io/users/{}/loans/{}", self.username, loan_id).parse().unwrap()
+        );
+
+
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::UserInfo>(&response_text)
     }
@@ -197,11 +261,15 @@ impl Client {
             loan_type
         };
 
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/loans", self.username).to_string())
-            .json(&request_new_loan_request)
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::POST,
+            format!("https://api.spacetraders.io/users/{}/loans", self.username).parse().unwrap()
+        )
+            .json(&request_new_loan_request);
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::UserInfo>(&response_text)
     }
@@ -212,10 +280,14 @@ impl Client {
     ///
     /// * `location` - A string containing the location name to get info about
     pub async fn get_location_info(&self, location: String) -> Result<responses::LocationInfo, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/game/locations/{}", location).to_string())
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+                format!("https://api.spacetraders.io/game/locations/{}", location).parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::LocationInfo>(&response_text)
     }
@@ -232,11 +304,15 @@ impl Client {
             query.push(("type", location_type));
         }
 
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/game/systems/{}/locations", system).to_string())
-            .query(&query)
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+                format!("https://api.spacetraders.io/game/systems/{}/locations", system).parse().unwrap()
+        )
+            .query(&query);
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::AvailableLocations>(&response_text)
     }
@@ -251,10 +327,14 @@ impl Client {
     ///
     /// * `location` - A string containing the name of the location to get marketplace data for
     pub async fn get_location_marketplace(&self, location: String) -> Result<responses::LocationMarketplace, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/game/locations/{}/marketplace", location))
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+                format!("https://api.spacetraders.io/game/locations/{}/marketplace", location).parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::LocationMarketplace>(&response_text)
     }
@@ -273,11 +353,15 @@ impl Client {
             quantity,
         };
 
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/purchase-orders", self.username).to_string())
-            .json(&purchase_order_request)
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::POST,
+                format!("https://api.spacetraders.io/users/{}/purchase-orders", self.username).parse().unwrap()
+        )
+            .json(&purchase_order_request);
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::PurchaseOrder>(&response_text)
     }
@@ -297,11 +381,15 @@ impl Client {
             quantity,
         };
 
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/sell-orders", self.username))
-            .json(&sell_order_request)
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::POST,
+            format!("https://api.spacetraders.io/users/{}/sell-orders", self.username).parse().unwrap()
+        )
+            .json(&sell_order_request);
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::PurchaseOrder>(&response_text)
     }
@@ -312,68 +400,77 @@ impl Client {
     ///
     /// * `location` - A string containing the location you'd like to purchase the ship from
     /// * `ship_type` - A string containing the type of ship you'd like to purchase
-    pub async fn purchase_ship(&self, location: String, ship_type: String) -> Result<responses::UserInfo, anyhow::Error> {
+    pub async fn purchase_ship(&self, location: String, ship_type: String) -> Result<responses::PurchaseShip, anyhow::Error> {
         let purchase_ship_request = requests::PurchaseShipRequest {
             location,
             ship_type,
         };
 
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.post(&format!("https://api.spacetraders.io/users/{}/ships", self.username).to_string())
-            .json(&purchase_ship_request)
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::POST,
+            format!("https://api.spacetraders.io/users/{}/ships", self.username).parse().unwrap()
+        )
+            .json(&purchase_ship_request);
 
-        parse_response::<responses::UserInfo>(&response_text)
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
+
+        parse_response::<responses::PurchaseShip>(&response_text)
     }
 
     /// Get all ships that are available for sale
     pub async fn get_ships_for_sale(&self) -> Result<responses::ShipsForSale, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get("https://api.spacetraders.io/game/ships")
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+            "https://api.spacetraders.io/game/ships".parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::ShipsForSale>(&response_text)
     }
 
     /// Get all your ships
     pub async fn get_your_ships(&self) -> Result<responses::YourShips, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/ships", self.username).to_string())
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+                format!("https://api.spacetraders.io/users/{}/ships", self.username).parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::YourShips>(&response_text)
     }
 
     /// Get information about all systems
     pub async fn get_systems_info(&self) -> Result<responses::SystemsInfo, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get("https://api.spacetraders.io/game/systems")
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+            "https://api.spacetraders.io/game/systems".parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::SystemsInfo>(&response_text)
     }
 
-    /// You begin the game by claiming a username and receiving a token for that username.
-    /// This will automatically use the username that was assigned when the Game struct was created
-    pub async fn claim_username_get_token(&self) -> Result<responses::ClaimUsername, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text = self.http_client.get(&format!("https://api.spacetraders.io/users/{}/token", self.username).to_string())
-            .send().await?
-            .text().await?;
-
-        parse_response::<responses::ClaimUsername>(&response_text)
-    }
-
     /// Get all information about the current user
     pub async fn get_user_info(&self) -> Result<responses::UserInfo, anyhow::Error> {
-        self.rate_limiter.until_ready().await;
-        let response_text  = self.http_client.get(&format!("https://api.spacetraders.io/users/{}", self.username).to_string())
-            .send().await?
-            .text().await?;
+        let http_client = self.http_client.lock().await;
+        let request_builder = http_client.get_request_builder(
+            Method::GET,
+                format!("https://api.spacetraders.io/users/{}", self.username).parse().unwrap()
+        );
+
+        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
+            .await?.text().await?;
 
         parse_response::<responses::UserInfo>(&response_text)
     }

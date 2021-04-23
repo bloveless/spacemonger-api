@@ -7,15 +7,15 @@ use crate::models::SystemInfo;
 pub async fn info(pg_pool: web::Data<PgPool>) -> impl Responder {
     let systems = sqlx::query("
         SELECT
-             system_symbol
-            ,system_name
-            ,location_symbol
-            ,location_name
-            ,location_type
-            ,x
-            ,y
-            ,created_at
-        FROM daemon.system_info;
+             si.system_symbol
+            ,si.system_name
+            ,si.location_symbol
+            ,si.location_name
+            ,si.location_type
+            ,si.x
+            ,si.y
+            ,si.created_at
+        FROM daemon_system_info si;
     ")
         .map(|row: PgRow| {
             SystemInfo {

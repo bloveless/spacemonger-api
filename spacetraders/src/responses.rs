@@ -171,3 +171,13 @@ pub struct LocationMarketplace {
     /// The marketplace data for the requested location
     pub location: shared::LocationMarketplaceData,
 }
+
+/// The representation of a purchase ship response
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct PurchaseShip {
+    /// The credits a user has after purchasing a ship
+    pub credits: i32,
+    /// The current data about the ship that was purchased
+    pub ship: shared::Ship,
+}

@@ -36,9 +36,9 @@ pub enum Good {
     /// Food
     #[serde(rename = "FOOD")]
     Food,
-    /// Workers
-    #[serde(rename = "WORKERS")]
-    Workers,
+    /// Drones
+    #[serde(rename = "DRONES")]
+    Drones,
     /// Textiles
     #[serde(rename = "TEXTILES")]
     Textiles,
@@ -198,6 +198,8 @@ pub struct Loan {
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct PurchaseLocation {
+    /// The system of the ship for sale
+    pub system: String,
     /// The location of the ship for sale
     pub location: String,
     /// The price of the ship at this location
@@ -301,15 +303,31 @@ pub struct StructureMaterial {
 }
 
 /// The structures that exist at a location
-/// TODO: This structure is a complete guess since I don't know where
-/// any current structures are. I'll have to do a system scan to get this info
 #[derive(Deserialize, Debug, Clone)]
 pub struct Structures {
+    /// The id of the structure
     pub id: String,
-    /// Name of the structure
-    pub name: String,
-    pub completed: bool,
-    pub materials: Vec<StructureMaterial>,
+    /// The structure type
+    #[serde(rename = "type")]
+    pub structure_type: String,
+    /// The structure location
+    pub location: String,
+    // pub completed: bool,
+    // pub materials: Vec<StructureMaterial>,
+}
+
+/// A representation of a ship docked at a system
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct SystemInfoShip {
+    /// The ships id
+    #[serde(rename = "shipId")]
+    pub id: String,
+    /// The username of the ships owner
+    pub username: String,
+    /// The type of the ship
+    #[serde(rename = "shipType")]
+    pub ship_type: String,
 }
 
 /// A representation of a location within a system
@@ -333,11 +351,14 @@ pub struct SystemsInfoLocation {
     /// The anomaly info about this sytem location
     pub anomaly: Option<String>,
     /// The ships currently docked in a system location
-    pub ships: Vec<Ship>,
+    pub ships: Vec<SystemInfoShip>,
     /// The structures within a system location
     pub structures: Option<Vec<Structures>>,
     /// Any messages relating to this system location
     pub messages: Option<Vec<String>>,
+    /// Whether or not the system allows construction
+    #[serde(rename = "allowsConstruction")]
+    pub allows_construction: bool,
 }
 
 /// The representation of a system
@@ -374,6 +395,51 @@ pub struct MarketplaceData {
     pub quantity_available: i32,
 }
 
+/// Available structure types
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub enum StructureType {
+    /// Fuel Refinery
+    #[serde(rename = "FUEL_REFINERY")]
+    FuelRefinery,
+    /// Warp Gate
+    #[serde(rename = "WARP_GATE")]
+    WarpGate,
+    /// Mine
+    #[serde(rename = "MINE")]
+    Mine,
+    /// Chemical Plant
+    #[serde(rename = "CHEMICAL_PLANT")]
+    ChemicalPlant,
+    /// Farm
+    #[serde(rename = "FARM")]
+    Farm,
+}
+
+/// A representation of structure found in marketplace data
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct StructureOwnedBy {
+    /// The user who owns the structure
+    pub username: String,
+}
+
+/// A representation of structure found in marketplace data
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct LocationMarketplaceStructure {
+    /// Id of this structure
+    pub id: String,
+    /// Type of this structure
+    #[serde(rename = "type")]
+    pub structure_type: StructureType,
+    /// The location of the structure
+    pub location: String,
+    /// The ownership information about the structure
+    #[serde(rename = "ownedBy")]
+    pub owned_by: Option<StructureOwnedBy>,
+}
+
 /// A representation of marketplace data for a location
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
@@ -392,9 +458,16 @@ pub struct LocationMarketplaceData {
     /// The marketplace data for the location
     pub marketplace: Vec<MarketplaceData>,
     /// The ships docked at a location
-    pub ships: Vec<Ship>,
+    pub ships: Vec<SystemInfoShip>,
     /// The anomaly at a specific location
     pub anomaly: Option<String>,
+    /// Whether or not the location allows constructing new structures
+    #[serde(rename = "allowsConstruction")]
+    pub allows_construction: bool,
+    /// Any structures present at this location
+    pub structures: Vec<LocationMarketplaceStructure>,
+    /// Any messages
+    pub messages: Option<Vec<String>>,
 }
 
 /// An error response returned from the API
