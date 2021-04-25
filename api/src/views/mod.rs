@@ -19,9 +19,12 @@ pub fn init(cfg: &mut web::ServiceConfig) {
 
     // systems
     cfg.service(systems::info);
+    cfg.service(systems::routes);
+    cfg.service(systems::goods);
 
     // locations
     cfg.service(locations::goods);
     cfg.service(locations::market_data);
     cfg.service(locations::goods_market_data);
+    cfg.service(locations::routes);
 }
