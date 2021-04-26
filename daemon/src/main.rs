@@ -43,6 +43,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let system_info = main_user.client.get_systems_info().await?;
 
+    for system in &system_info.systems {
+        for location in &system.locations {
+            db::persist_system_location(pg_pool.clone(), system, location).await?;
+        }
+    }
+
+    println!("## Begin System Messages ----------------------------------------------------------");
+    for system in &system_info.systems {
+        for location in &system.locations {
+            if let Some(messages) = &location.messages {
+                for message in messages {
+                    println!("Location: {} Message: {}", location.symbol, message)
+                }
+            }
+        }
+    }
+    println!("## End System Messages ------------------------------------------------------------");
 
     let mut scouts: Vec<funcs::User> = Vec::new();
 
