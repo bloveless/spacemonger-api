@@ -1,7 +1,7 @@
 use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Row, PgPool};
-use chrono::{Utc, Datelike};
+use chrono::Utc;
 
 #[derive(Debug)]
 pub struct Ship {

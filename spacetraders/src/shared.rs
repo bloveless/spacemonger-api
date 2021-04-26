@@ -291,6 +291,7 @@ pub struct FlightPlanData {
     /// The time remaining until the ship arrives at the destination in seconds
     #[serde(rename = "timeRemainingInSeconds")]
     pub time_remaining_in_seconds: i32,
+    /// The date time that the flight plan was created at
     #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
     /// The DateTime at which the ship will arrive
@@ -309,14 +310,6 @@ pub struct FlightPlanData {
 
 }
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct StructureMaterial {
-    pub good: Good,
-    pub quantity: i32,
-    #[serde(rename = "targetQuantity")]
-    pub target_quantity: i32,
-}
-
 /// The structures that exist at a location
 #[derive(Deserialize, Debug, Clone)]
 pub struct Structures {
@@ -327,8 +320,6 @@ pub struct Structures {
     pub structure_type: String,
     /// The structure location
     pub location: String,
-    // pub completed: bool,
-    // pub materials: Vec<StructureMaterial>,
 }
 
 /// A representation of a location within a system
@@ -384,9 +375,10 @@ pub struct MarketplaceData {
     /// The price per unit of the good
     #[serde(rename = "pricePerUnit")]
     pub price_per_unit: i32,
-    pub spread: i32,
+    /// The purchase price per unit of a good
     #[serde(rename = "purchasePricePerUnit")]
     pub purchase_price_per_unit: i32,
+    /// The sell price per unit of a good
     #[serde(rename = "sellPricePerUnit")]
     pub sell_price_per_unit: i32,
     /// How much of the good is available at this location

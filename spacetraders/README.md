@@ -12,7 +12,7 @@ additional fields! Thanks!
 ## Example
 
 You can view my spacetraders bot here https://github.com/bloveless/spacemonger-api which has a full example of how to
-use this create.
+use this crate.
 
 A brief example is included below.
 

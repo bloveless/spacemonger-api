@@ -1,8 +1,6 @@
 use crate::db;
-use spacetraders::client::{Client, ArcHttpClient};
+use spacetraders::client::{Client, HttpClient};
 use spacetraders::{shared, responses, client};
-use tokio::time::Duration;
-use std::convert::TryFrom;
 use sqlx::PgPool;
 
 #[derive(Debug, Clone)]
@@ -15,7 +13,7 @@ pub struct User {
     pub client: Client,
 }
 
-pub(crate) async fn get_user(http_client: ArcHttpClient, pg_pool: PgPool, username: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
+pub(crate) async fn get_user(http_client: HttpClient, pg_pool: PgPool, username: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
     let db_user = db::get_user(pg_pool.clone(), username.to_owned()).await?;
 
     if let Some(user) = db_user {
@@ -80,34 +78,4 @@ pub async fn get_systems(user: &User, pg_pool: PgPool) -> Result<responses::Syst
     }
 
     Ok(systems_info)
-}
-
-pub async fn get_fastest_ship(user: &User) -> Result<Option<shared::Ship>, Box< dyn std::error::Error>> {
-    let user_info = user.client.get_user_info().await?;
-
-    let mut fastest_ship_speed = 0;
-    let mut fastest_ship = None;
-
-    for ship in user_info.user.ships {
-        if ship.speed > fastest_ship_speed {
-            fastest_ship = Some(ship.to_owned());
-            fastest_ship_speed = ship.speed;
-        }
-    }
-
-    Ok(fastest_ship)
-}
-
-pub async fn get_ship(user: &User, ship_id: String) -> Result<Option<shared::Ship>, Box<dyn std::error::Error>> {
-    let user_info = user.client.get_user_info().await?;
-
-    let mut ship = None;
-
-    for current_ship in user_info.user.ships {
-        if current_ship.id == ship_id {
-            ship = Some(current_ship.to_owned());
-        }
-    }
-
-    Ok(ship)
 }

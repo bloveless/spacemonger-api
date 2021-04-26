@@ -2,26 +2,26 @@
 use crate::{responses, requests};
 use crate::shared;
 
-use reqwest;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use std::error::Error;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Method, Url};
 use std::str::FromStr;
 use tokio::time::Duration;
 
-pub type ArcHttpClient = Arc<Mutex<HttpClient>>;
+/// HttpClient is a thread-safe rate-limited space traders client
+pub type HttpClient = Arc<Mutex<SpaceTradersClient>>;
 
-#[derive(Debug)]
-pub struct HttpClient {
+/// SpaceTradersClient wraps the actual reqwest client and adds rate-limiting support
+#[derive(Debug, Clone)]
+pub struct SpaceTradersClient {
     client: reqwest::Client,
 }
 
-impl HttpClient {
-    fn new() -> HttpClient {
-        HttpClient {
+impl SpaceTradersClient {
+    fn new() -> SpaceTradersClient {
+        SpaceTradersClient {
             client: reqwest::Client::new(),
         }
     }
@@ -44,7 +44,7 @@ impl HttpClient {
             Ok(response) => {
                 // Check if the response was a throttle exception (status 429 means we have been rate limited)
                 if response.status() == 429 {
-                    let mut retry_after: f64 = response.headers()
+                    let retry_after: f64 = response.headers()
                         .get("retry-after").unwrap()
                         .to_str().unwrap()
                         .parse().unwrap();
@@ -64,8 +64,9 @@ impl HttpClient {
     }
 }
 
-pub fn get_http_client() -> ArcHttpClient {
-    Arc::new(Mutex::new(HttpClient::new()))
+/// Get a rate-limited http client that is safe to use across threads and won't break rate-limiting
+pub fn get_http_client() -> HttpClient {
+    Arc::new(Mutex::new(SpaceTradersClient::new()))
 }
 
 /// Parse a response string into the type represented by T
@@ -95,7 +96,7 @@ fn parse_response<'a, T: Deserialize<'a>>(response_text: &'a str) -> Result<T, a
 /// # Arguments
 ///
 /// * `username` - A string containing the username to get a token for
-pub async fn claim_username(http_client: ArcHttpClient, username: String) -> Result<responses::ClaimUsername, anyhow::Error> {
+pub async fn claim_username(http_client: HttpClient, username: String) -> Result<responses::ClaimUsername, anyhow::Error> {
     let http_client = http_client.lock().await;
     let request_builder = http_client.request_builder(
         Method::POST,
@@ -109,10 +110,10 @@ pub async fn claim_username(http_client: ArcHttpClient, username: String) -> Res
     parse_response::<responses::ClaimUsername>(&response_text)
 }
 
-/// A game that is associated to a specific username
+/// A SpaceTraders client that is associated to a specific username
 #[derive(Debug, Clone)]
 pub struct Client {
-    http_client: ArcHttpClient,
+    http_client: HttpClient,
     /// The users username
     pub username: String,
     /// The uses access token
@@ -126,7 +127,7 @@ impl Client {
     ///
     /// * `username` - A string containing the username of the current player
     /// * `token` - A string containing the access token for the username provided
-    pub fn new(http_client: ArcHttpClient, username: String, token: String) -> Client {
+    pub fn new(http_client: HttpClient, username: String, token: String) -> Client {
         Client {
             http_client,
             username,

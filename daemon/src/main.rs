@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         panic!("Unable to connect using the main user. Assuming an API reset. Backing up data and clearing the database");
     };
 
-    let system_info = main_user.client.get_systems_info().await?;
+    let system_info = funcs::get_systems(&main_user, pg_pool.clone()).await?;
 
     for system in &system_info.systems {
         for location in &system.locations {
