@@ -109,13 +109,10 @@ pub async fn claim_username(http_client: ArcHttpClient, username: String) -> Res
     parse_response::<responses::ClaimUsername>(&response_text)
 }
 
-
 /// A game that is associated to a specific username
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     http_client: ArcHttpClient,
-    /// The users spacetraders API id
-    pub user_id: String,
     /// The users username
     pub username: String,
     /// The uses access token
@@ -129,22 +126,13 @@ impl Client {
     ///
     /// * `username` - A string containing the username of the current player
     /// * `token` - A string containing the access token for the username provided
-    pub fn new(http_client: ArcHttpClient, user_id: String, username: String, token: String) -> Client {
+    pub fn new(http_client: ArcHttpClient, username: String, token: String) -> Client {
         Client {
             http_client,
-            user_id,
             username,
             token,
         }
     }
-
-    // async fn execute_request<'a, T: Deserialize<'a>>(&self, request: Request) -> Result<T, anyhow::Error> {
-    //     self.rate_limiter.until_ready().await;
-    //     let response = self.http_client.execute(request).await?;
-    //     let response_text = response.text().await?;
-    //
-    //     parse_response::<T>(&response_text)
-    // }
 
     /// Get the current details of a flight plan
     ///

@@ -171,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
 
                     let flight_plan = funcs::create_flight_plan(
-                        &scout.client,
+                        &scout.clone(),
                         pg_pool.clone(),
                         ship,
                         scout.location_symbol.unwrap())

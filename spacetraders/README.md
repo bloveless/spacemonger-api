@@ -11,7 +11,7 @@ additional fields! Thanks!
 
 ## Example
 
-You can view my spacetraders bot here https://github.com/bloveless/spacetraders-rs which has a full example of how to
+You can view my spacetraders bot here https://github.com/bloveless/spacemonger-api which has a full example of how to
 use this create.
 
 A brief example is included below.
@@ -19,7 +19,9 @@ A brief example is included below.
 ```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let http_client = client::get_http_client();
     let client = Client::new(
+        http_client,
         "your-username".to_string(),
         "your-token".to_string(),
     );

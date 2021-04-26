@@ -5,13 +5,14 @@ use tokio::time::Duration;
 use std::convert::TryFrom;
 use sqlx::PgPool;
 
-#[derive(Debug)]
-pub(crate) struct User {
-    pub(crate) username: String,
-    assignment: String,
-    pub(crate) system_symbol: Option<String>,
-    pub(crate) location_symbol: Option<String>,
-    pub(crate) client: Client,
+#[derive(Debug, Clone)]
+pub struct User {
+    pub username: String,
+    pub id: String,
+    pub assignment: String,
+    pub system_symbol: Option<String>,
+    pub location_symbol: Option<String>,
+    pub client: Client,
 }
 
 pub(crate) async fn get_user(http_client: ArcHttpClient, pg_pool: PgPool, username: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<User, Box<dyn std::error::Error>> {
@@ -22,10 +23,11 @@ pub(crate) async fn get_user(http_client: ArcHttpClient, pg_pool: PgPool, userna
         Ok(
             User {
                 username,
+                id: user.id,
                 assignment,
                 system_symbol,
                 location_symbol,
-                client: Client::new(http_client, user.id, user.username, user.token),
+                client: Client::new(http_client, user.username, user.token),
             }
         )
     } else {
@@ -48,26 +50,27 @@ pub(crate) async fn get_user(http_client: ArcHttpClient, pg_pool: PgPool, userna
         Ok(
             User {
                 username: username.to_owned(),
+                id: user.id,
                 assignment,
                 system_symbol,
                 location_symbol,
-                client: Client::new(http_client.clone(), user.id, username.to_owned(), claimed_user.token.to_owned()),
+                client: Client::new(http_client.clone(), username.to_owned(), claimed_user.token.to_owned()),
             }
         )
     }
 }
 
 
-pub async fn create_flight_plan(client: &Client, pg_pool: PgPool, ship: &shared::Ship, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
-    let flight_plan = client.create_flight_plan(ship.id.to_owned(), destination.to_owned()).await?;
+pub async fn create_flight_plan(user: &User, pg_pool: PgPool, ship: &shared::Ship, destination: String) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
+    let flight_plan = user.client.create_flight_plan(ship.id.to_owned(), destination.to_owned()).await?;
 
-    db::persist_flight_plan(pg_pool, client.user_id.clone(), ship, &flight_plan).await?;
+    db::persist_flight_plan(pg_pool, user.id.clone(), ship, &flight_plan).await?;
 
     Ok(flight_plan)
 }
 
-pub async fn get_systems(client: &Client, pg_pool: PgPool) -> Result<responses::SystemsInfo, Box<dyn std::error::Error>> {
-    let systems_info = client.get_systems_info().await?;
+pub async fn get_systems(user: &User, pg_pool: PgPool) -> Result<responses::SystemsInfo, Box<dyn std::error::Error>> {
+    let systems_info = user.client.get_systems_info().await?;
     println!("Systems info: {:?}", systems_info);
 
     for system in &systems_info.systems {
@@ -79,8 +82,8 @@ pub async fn get_systems(client: &Client, pg_pool: PgPool) -> Result<responses::
     Ok(systems_info)
 }
 
-pub async fn get_fastest_ship(client: &Client) -> Result<Option<shared::Ship>, Box< dyn std::error::Error>> {
-    let user_info = client.get_user_info().await?;
+pub async fn get_fastest_ship(user: &User) -> Result<Option<shared::Ship>, Box< dyn std::error::Error>> {
+    let user_info = user.client.get_user_info().await?;
 
     let mut fastest_ship_speed = 0;
     let mut fastest_ship = None;
@@ -95,8 +98,8 @@ pub async fn get_fastest_ship(client: &Client) -> Result<Option<shared::Ship>, B
     Ok(fastest_ship)
 }
 
-pub async fn get_ship(client: &Client, ship_id: String) -> Result<Option<shared::Ship>, Box<dyn std::error::Error>> {
-    let user_info = client.get_user_info().await?;
+pub async fn get_ship(user: &User, ship_id: String) -> Result<Option<shared::Ship>, Box<dyn std::error::Error>> {
+    let user_info = user.client.get_user_info().await?;
 
     let mut ship = None;
 
@@ -107,63 +110,4 @@ pub async fn get_ship(client: &Client, ship_id: String) -> Result<Option<shared:
     }
 
     Ok(ship)
-}
-
-pub async fn scan_system(client: &Client, ship: shared::Ship, pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
-    let mut ship = ship.clone();
-    let systems_info = get_systems(client, pg_pool.clone()).await?;
-
-    // Fill the ship as full as possible with fuel
-    let ship_cargo_count = ship.cargo.iter().fold(0, |sum, cargo| sum + cargo.quantity);
-    if ship_cargo_count < ship.max_cargo {
-        let purchase_order_response = client.create_purchase_order(
-            ship.clone(),
-            shared::Good::Fuel,
-            ship.max_cargo - ship_cargo_count,
-        ).await?;
-
-        println!("Fill up ship ------------------------------------------------------------------");
-        println!("{:?}", purchase_order_response);
-    }
-
-    // Then set a course and wait for the ship to arrive at each location
-
-    for system in systems_info.systems {
-        for location in system.locations {
-            println!("Location symbol: {}", location.symbol);
-
-            // Don't attempt to fly to a location that the ship is already at
-            if ship.clone().location != Some(location.symbol.clone()) {
-                let flight_plan = create_flight_plan(client, pg_pool.clone(), &ship, location.symbol.clone()).await?;
-                println!("Flight plan: {:?}", &flight_plan);
-
-                println!("Waiting for {} seconds", flight_plan.flight_plan.time_remaining_in_seconds + 5);
-                tokio::time::sleep(Duration::new(u64::try_from(flight_plan.flight_plan.time_remaining_in_seconds + 5).unwrap(), 0)).await;
-
-                ship.location = Some(location.symbol.clone());
-            }
-
-            let marketplace_info = client.get_location_marketplace(location.symbol.clone()).await?;
-
-            for datum in marketplace_info.location.marketplace {
-                println!("Location: {}, Good: {:?}, Available: {}, Price Per Unit: {}", &location.symbol, &datum.symbol, &datum.quantity_available, &datum.price_per_unit);
-
-                db::persist_market_data(pg_pool.clone(), &location, &datum).await?;
-            }
-
-            let ship_info = client.get_your_ships().await?;
-            let ship_info = ship_info.ships.iter().find(|s| s.id == ship.id).unwrap().to_owned();
-
-            let ship_fuel = ship_info.cargo.iter().fold(0, |sum, cargo| if cargo.good == shared::Good::Fuel { sum + cargo.quantity } else { sum });
-            println!("Current ship fuel: {}", ship_fuel);
-
-            // If the ship is less than 2/3 full fill it all the way up!
-            if ship_fuel < 66 {
-                println!("Purchasing {} fuel", 100 - ship_fuel);
-                client.create_purchase_order(ship.clone(), shared::Good::Fuel, 100 - ship_fuel).await?;
-            }
-        }
-    }
-
-    Ok(())
 }
