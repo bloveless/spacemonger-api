@@ -39,20 +39,20 @@ pub struct SystemInfo {
 
 #[derive(Serialize, Deserialize)]
 pub struct Route {
-    pub buy_location_symbol: String,
+    pub purchase_location_symbol: String,
     pub sell_location_symbol: String,
     pub good_symbol: String,
-    pub buy_x: i32,
-    pub buy_y: i32,
+    pub purchase_x: i32,
+    pub purchase_y: i32,
     pub sell_x: i32,
     pub sell_y: i32,
     pub distance: f64,
-    pub buy_location_type: String,
+    pub purchase_location_type: String,
     pub approximate_fuel: i32,
-    pub buy_quantity_available: i32,
+    pub purchase_quantity_available: i32,
     pub sell_quantity_available: i32,
-    pub buy_price_per_unit: i32,
+    pub purchase_price_per_unit: i32,
     pub sell_price_per_unit: i32,
-    pub buy_created_at: DateTime<Utc>,
+    pub purchase_created_at: DateTime<Utc>,
     pub sell_created_at: DateTime<Utc>,
 }

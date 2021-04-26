@@ -76,7 +76,8 @@ pub async fn routes(params: web::Path<(String, String)>, pg_pool: web::Data<PgPo
             ,y INT NOT NULL
             ,good_symbol VARCHAR(100) NOT NULL
             ,quantity_available INT NOT NULL
-            ,price_per_unit INT NOT NULL
+            ,purchase_price_per_unit INT NOT NULL
+            ,sell_price_per_unit INT NOT NULL
             ,created_at TIMESTAMP WITH TIME ZONE NOT NULL
         );
     ")
@@ -101,7 +102,8 @@ pub async fn routes(params: web::Path<(String, String)>, pg_pool: web::Data<PgPo
             ,y
             ,good_symbol
             ,quantity_available
-            ,price_per_unit
+            ,purchase_price_per_unit
+            ,sell_price_per_unit
             ,created_at
         )
         SELECT
@@ -110,7 +112,8 @@ pub async fn routes(params: web::Path<(String, String)>, pg_pool: web::Data<PgPo
             ,dsi.y
             ,dmd.good_symbol
             ,dmd.quantity_available
-            ,dmd.price_per_unit
+            ,dmd.purchase_price_per_unit
+            ,dmd.sell_price_per_unit
             ,dmd.created_at
         FROM daemon_market_data dmd
         INNER JOIN ranked_location_goods rlg ON dmd.id= rlg.id
@@ -128,66 +131,66 @@ pub async fn routes(params: web::Path<(String, String)>, pg_pool: web::Data<PgPo
     let system_routes = sqlx::query("
         -- calculate the route from each location to each location per good
         SELECT
-             t.buy_location_symbol
+             t.purchase_location_symbol
             ,t.sell_location_symbol
             ,t.good_symbol
-            ,t.buy_x
-            ,t.buy_y
+            ,t.purchase_x
+            ,t.purchase_y
             ,t.sell_x
             ,t.sell_y
             ,t.distance
-            ,buy_dsi.location_type AS buy_location_type
+            ,purchase_dsi.location_type AS purchase_location_type
             ,CASE
-                WHEN buy_dsi.location_type = 'Planet' THEN CEIL((t.distance / 4) + 2 + 1)::INT
+                WHEN purchase_dsi.location_type = 'Planet' THEN CEIL((t.distance / 4) + 2 + 1)::INT
                 ELSE CEIL((t.distance / 4) + 1)::INT
              END AS approximate_fuel
-            ,t.buy_quantity_available
+            ,t.purchase_quantity_available
             ,t.sell_quantity_available
-            ,t.buy_price_per_unit
+            ,t.purchase_price_per_unit
             ,t.sell_price_per_unit
-            ,t.buy_created_at
+            ,t.purchase_created_at
             ,t.sell_created_at
         FROM (
             SELECT
-                 llg1.location_symbol AS buy_location_symbol
+                 llg1.location_symbol AS purchase_location_symbol
                 ,llg2.location_symbol AS sell_location_symbol
                 ,llg2.good_symbol
-                ,llg1.x AS buy_x
-                ,llg1.y AS buy_y
+                ,llg1.x AS purchase_x
+                ,llg1.y AS purchase_y
                 ,llg2.x AS sell_x
                 ,llg2.y AS sell_y
                 ,SQRT(POW(llg1.x - llg2.x, 2) + POW(llg2.y - llg1.y, 2)) AS distance
-                ,llg1.quantity_available AS buy_quantity_available
+                ,llg1.quantity_available AS purchase_quantity_available
                 ,llg2.quantity_available AS sell_quantity_available
-                ,llg1.price_per_unit AS buy_price_per_unit
-                ,llg2.price_per_unit AS sell_price_per_unit
-                ,llg1.created_at AS buy_created_at
+                ,llg1.purchase_price_per_unit AS purchase_price_per_unit
+                ,llg2.sell_price_per_unit AS sell_price_per_unit
+                ,llg1.created_at AS purchase_created_at
                 ,llg2.created_at AS sell_created_at
             FROM tmp_latest_location_goods llg1
             CROSS JOIN tmp_latest_location_goods llg2
             WHERE llg1.good_symbol = llg2.good_symbol
                 AND llg1.location_symbol != llg2.location_symbol
         ) as t
-        INNER JOIN daemon_system_info buy_dsi
-            ON buy_dsi.location_symbol = t.buy_location_symbol;
+        INNER JOIN daemon_system_info purchase_dsi
+            ON purchase_dsi.location_symbol = t.purchase_location_symbol;
     ")
         .map(|row: PgRow| {
             Route {
-                buy_location_symbol: row.get("buy_location_symbol"),
+                purchase_location_symbol: row.get("purchase_location_symbol"),
                 sell_location_symbol: row.get("sell_location_symbol"),
                 good_symbol: row.get("good_symbol"),
-                buy_x: row.get("buy_x"),
-                buy_y: row.get("buy_y"),
+                purchase_x: row.get("purchase_x"),
+                purchase_y: row.get("purchase_y"),
                 sell_x: row.get("sell_x"),
                 sell_y: row.get("sell_y"),
                 distance: row.get("distance"),
-                buy_location_type: row.get("buy_location_type"),
+                purchase_location_type: row.get("purchase_location_type"),
                 approximate_fuel: row.get("approximate_fuel"),
-                buy_quantity_available: row.get("buy_quantity_available"),
+                purchase_quantity_available: row.get("purchase_quantity_available"),
                 sell_quantity_available: row.get("sell_quantity_available"),
-                buy_price_per_unit: row.get("buy_price_per_unit"),
+                purchase_price_per_unit: row.get("purchase_price_per_unit"),
                 sell_price_per_unit: row.get("sell_price_per_unit"),
-                buy_created_at: row.get("buy_created_at"),
+                purchase_created_at: row.get("purchase_created_at"),
                 sell_created_at: row.get("sell_created_at"),
             }
         })

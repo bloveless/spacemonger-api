@@ -1,0 +1,9 @@
+###
+# Get location routes for location OE-BO
+GET http://localhost:8080/api/locations/OE-BO/routes
+Accept: application/json
+
+###
+# Get system routes for "OE" with good "Drones"
+GET http://localhost:8080/api/systems/OE/routes/Drones
+Accept: application/json
