@@ -256,7 +256,7 @@ impl Client {
     /// # Arguments
     ///
     /// * `loan_type` - A LoanType with the type of loan being requested for the current user
-    pub async fn request_new_loan(&self, loan_type: shared::LoanType) -> Result<responses::UserInfo, anyhow::Error> {
+    pub async fn request_new_loan(&self, loan_type: shared::LoanType) -> Result<responses::RequestLoan, anyhow::Error> {
         let request_new_loan_request = requests::RequestNewLoanRequest {
             loan_type
         };
@@ -271,7 +271,7 @@ impl Client {
         let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
             .await?.text().await?;
 
-        parse_response::<responses::UserInfo>(&response_text)
+        parse_response::<responses::RequestLoan>(&response_text)
     }
 
     /// Get location info about a specific location

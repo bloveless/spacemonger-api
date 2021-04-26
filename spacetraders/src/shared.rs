@@ -75,6 +75,21 @@ pub enum Good {
     /// Protein Synthesizers
     #[serde(rename = "PROTEIN_SYNTHESIZERS")]
     ProteinSynthesizers,
+    /// Biometric Firearms
+    #[serde(rename = "BIOMETRIC_FIREARMS")]
+    BiometricFirearms,
+    /// Explosives
+    #[serde(rename = "EXPLOSIVES")]
+    Explosives,
+    /// Nanobots
+    #[serde(rename = "NANOBOTS")]
+    Nanobots,
+    /// Precision Instruments
+    #[serde(rename = "PRECISION_INSTRUMENTS")]
+    PrecisionInstruments,
+    /// Narcotics
+    #[serde(rename = "NARCOTICS")]
+    Narcotics,
 }
 
 impl fmt::Display for Good {
@@ -316,20 +331,6 @@ pub struct Structures {
     // pub materials: Vec<StructureMaterial>,
 }
 
-/// A representation of a ship docked at a system
-#[derive(Deserialize, Debug, Clone)]
-#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
-pub struct SystemInfoShip {
-    /// The ships id
-    #[serde(rename = "shipId")]
-    pub id: String,
-    /// The username of the ships owner
-    pub username: String,
-    /// The type of the ship
-    #[serde(rename = "shipType")]
-    pub ship_type: String,
-}
-
 /// A representation of a location within a system
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
@@ -350,8 +351,6 @@ pub struct SystemsInfoLocation {
     pub ansible_progress: Option<f64>,
     /// The anomaly info about this sytem location
     pub anomaly: Option<String>,
-    /// The ships currently docked in a system location
-    pub ships: Vec<SystemInfoShip>,
     /// The structures within a system location
     pub structures: Option<Vec<Structures>>,
     /// Any messages relating to this system location
@@ -457,8 +456,6 @@ pub struct LocationMarketplaceData {
     pub y: i32,
     /// The marketplace data for the location
     pub marketplace: Vec<MarketplaceData>,
-    /// The ships docked at a location
-    pub ships: Vec<SystemInfoShip>,
     /// The anomaly at a specific location
     pub anomaly: Option<String>,
     /// Whether or not the location allows constructing new structures

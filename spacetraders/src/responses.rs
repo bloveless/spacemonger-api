@@ -60,6 +60,16 @@ pub struct AvailableLoans {
     pub loans: Vec<AvailableLoan>,
 }
 
+/// A representation of a request loan response
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct RequestLoan {
+    /// The users new credits
+    pub credits: i32,
+    /// The loan granted information
+    pub loan: shared::Loan,
+}
+
 /// The representation of a ships for sale request
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]

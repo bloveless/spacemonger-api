@@ -1,8 +1,7 @@
 use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
-use sqlx::{Row, PgPool, PgConnection, Executor};
-use chrono::Utc;
-use std::borrow::Borrow;
+use sqlx::{Row, PgPool};
+use chrono::{Utc, Datelike};
 
 #[derive(Debug)]
 pub struct Ship {
@@ -35,6 +34,25 @@ pub async fn run_migrations(pg_pool: PgPool) -> Result<(), Box<dyn std::error::E
         .run(&pg_pool)
         .await
         .expect("Failed to migrate database");
+
+    Ok(())
+}
+
+pub async fn reset_db(pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+    let now = Utc::now();
+    let now = now.format("%Y%m%d").to_string();
+
+    sqlx::query(&format!("ALTER TABLE daemon_flight_plans RENAME TO z{}_daemon_flight_plans", now))
+        .execute(&pg_pool).await?;
+    sqlx::query(&format!("ALTER TABLE daemon_market_data RENAME TO z{}_daemon_market_data", now))
+        .execute(&pg_pool).await?;
+    sqlx::query(&format!("ALTER TABLE daemon_system_info RENAME TO z{}_daemon_system_info", now))
+        .execute(&pg_pool).await?;
+    sqlx::query(&format!("ALTER TABLE daemon_users RENAME TO z{}_daemon_users", now))
+        .execute(&pg_pool).await?;
+
+    // Drop the sqlx migrations table so all the tables will be created again
+    sqlx::query("DROP TABLE _sqlx_migrations;").execute(&pg_pool).await?;
 
     Ok(())
 }

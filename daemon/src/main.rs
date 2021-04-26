@@ -31,25 +31,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_client = client::get_http_client();
     let main_user = funcs::get_user(http_client.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await?;
 
+    // When an API reset occurs all the scouts will being to fail making requests.
+    // As soon as all the scouts fail this pod will restart. Upon restart we will get
+    // the main user and attempt to get the system info. If the main user is unable to make a request
+    // we can assume that the API has been reset and we need to reset ourselves.
+    if main_user.client.get_user_info().await.is_err() {
+        db::reset_db(pg_pool.clone()).await?;
+        // Now that the tables have been we will panic so that the pod will restart and the tables will be recreated
+        panic!("Unable to connect using the main user. Assuming an API reset. Backing up data and clearing the database");
+    };
+
     let system_info = main_user.client.get_systems_info().await?;
 
-    for system in &system_info.systems {
-        for location in &system.locations {
-            db::persist_system_location(pg_pool.clone(), system, location).await?;
-        }
-    }
-
-    println!("## Begin System Messages ----------------------------------------------------------");
-    for system in &system_info.systems {
-        for location in &system.locations {
-            if let Some(messages) = &location.messages {
-                for message in messages {
-                    println!("Location: {} Message: {}", location.symbol, message)
-                }
-            }
-        }
-    }
-    println!("## End System Messages ------------------------------------------------------------");
 
     let mut scouts: Vec<funcs::User> = Vec::new();
 
@@ -80,8 +73,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // 1. if the user doesn't have enough credits take out a startup loan
             println!("Scout {} -- user info {:?}", scout.username, current_user_info);
             if current_user_info.user.credits == 0 {
+                println!("Scout {} -- Requesting new {:?} loan", scout.username, LoanType::Startup);
                 // assume that if the user has 0 credits that the user needs to take out a loan
-                current_user_info = scout.client.request_new_loan(LoanType::Startup).await?;
+                scout.client.request_new_loan(LoanType::Startup).await?;
+                current_user_info = scout.client.get_user_info().await?;
             }
 
             // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
