@@ -67,5 +67,5 @@ metadata:
 spec:
   containers:
     - name: spacemonger-ui
-      image: bloveless/spacemonger-ui:0.1.0-alpha.4
+      image: bloveless/spacemonger-ui:0.1.0-alpha.5
   restartPolicy: Always
