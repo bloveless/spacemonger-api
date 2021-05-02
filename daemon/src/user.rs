@@ -221,10 +221,8 @@ impl User {
         let marketplace_data = self.client.get_location_marketplace(location_symbol.clone()).await?;
         println!("Scout {} -- at {} received marketplace data {:?}", self.username, location_symbol.clone(), marketplace_data);
 
-        let system_location = self.client.get_location_info(location_symbol.clone()).await?;
-
         for datum in marketplace_data.location.marketplace {
-            db::persist_market_data(self.pg_pool.clone(), &system_location.location, &datum)
+            db::persist_market_data(self.pg_pool.clone(), location_symbol.clone(), &datum)
                 .await.expect("Unable to save market data");
         }
 

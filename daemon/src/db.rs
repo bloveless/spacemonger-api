@@ -254,12 +254,12 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Res
     )
 }
 
-pub async fn persist_market_data(pg_pool: PgPool, location: &shared::SystemsInfoLocation, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_market_data(pg_pool: PgPool, location_symbol: String, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
         INSERT INTO daemon_market_data(location_symbol, good_symbol, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
         VALUES ($1, $2, $3, $4, $5, $6, $7);
     ")
-        .bind(&location.symbol)
+        .bind(&location_symbol)
         .bind(&marketplace_data.symbol.to_string())
         .bind(&marketplace_data.price_per_unit)
         .bind(&marketplace_data.volume_per_unit)

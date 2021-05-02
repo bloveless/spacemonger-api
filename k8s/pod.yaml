@@ -9,7 +9,7 @@ metadata:
 spec:
   containers:
   - name: spacemongerd
-    image: bloveless/spacemongerd:0.1.0-alpha.9
+    image: bloveless/spacemongerd:0.1.0-alpha.10
     command: ["/app/spacemongerd"]
     envFrom:
     - secretRef:

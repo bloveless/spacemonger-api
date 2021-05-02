@@ -44,18 +44,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut main_user = User::new(http_client.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await?;
-
     // When an API reset occurs all the scouts will being to fail making requests.
     // As soon as all the scouts fail this pod will restart. Upon restart we will check
     // if the API is in maintenance mode (status code 503) if it is then we will wait for
     // maintenance mode to end. After that ends if the main user is unable to make a requests
     // we can assume that the API has been reset and we need to reset ourselves.
-    if main_user.update_user_info().await.is_err() {
+    let main_user = User::new(http_client.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await;
+    if main_user.is_err() {
         db::reset_db(pg_pool.clone()).await?;
         // Now that the tables have been we will panic so that the pod will restart and the tables will be recreated
         panic!("Unable to connect using the main user. Assuming an API reset. Backing up data and clearing the database");
-    };
+    }
+
+    let mut main_user = main_user.unwrap();
 
     let system_info = main_user.get_systems().await?;
 
