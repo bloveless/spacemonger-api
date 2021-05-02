@@ -10,3 +10,4 @@ pub mod client;
 pub mod shared;
 pub mod responses;
 pub mod requests;
+pub mod errors;

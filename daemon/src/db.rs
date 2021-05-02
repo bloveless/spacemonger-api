@@ -1,7 +1,7 @@
 use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Row, PgPool};
-use chrono::Utc;
+use chrono::{Utc, DateTime};
 
 #[derive(Debug)]
 pub struct Ship {
@@ -18,6 +18,18 @@ pub struct DbUser {
     pub assignment: String,
     pub system_symbol: Option<String>,
     pub location_symbol: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct DbSystemLocation {
+    pub system_symbol: String,
+    pub system_name: String,
+    pub location_symbol: String,
+    pub location_name: String,
+    pub location_type: String,
+    pub x: i32,
+    pub y: i32,
+    pub created_at: DateTime<Utc>,
 }
 
 pub async fn get_db_pool(host: String, port: i32, username: String, password: String, database: String) -> Result<PgPool, Box<dyn std::error::Error>> {
@@ -166,6 +178,39 @@ pub async fn persist_flight_plan(pg_pool: PgPool, user_id: String, ship: &shared
         .await?;
 
     Ok(())
+}
+
+pub async fn get_system_location(pg_pool: PgPool, location_symbol: String) -> Result<DbSystemLocation, Box<dyn std::error::Error>> {
+    Ok(
+        sqlx::query("
+            SELECT
+                 system_symbol
+                ,system_name
+                ,location_symbol
+                ,location_name
+                ,location_type
+                ,x
+                ,y
+                ,created_at
+            FROM daemon_system_info
+            WHERE location_symbol = $1;
+        ")
+            .bind(&location_symbol)
+            .map(|row: PgRow| {
+                DbSystemLocation {
+                    system_symbol: row.get("system_symbol"),
+                    system_name: row.get("system_name"),
+                    location_symbol: row.get("location_symbol"),
+                    location_name: row.get("location_name"),
+                    location_type: row.get("location_type"),
+                    x: row.get("x"),
+                    y: row.get("y"),
+                    created_at: row.get("created_at"),
+                }
+            })
+            .fetch_one(&pg_pool)
+            .await?
+    )
 }
 
 pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Result<Option<shared::FlightPlanData>, Box<dyn std::error::Error>> {

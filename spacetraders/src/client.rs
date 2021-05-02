@@ -6,9 +6,10 @@ use serde::Deserialize;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::{Method, Url};
+use reqwest::{Method, Url, StatusCode};
 use std::str::FromStr;
 use tokio::time::Duration;
+use crate::errors::GameStatusError;
 
 /// HttpClient is a thread-safe rate-limited space traders client
 pub type HttpClient = Arc<Mutex<SpaceTradersClient>>;
@@ -110,6 +111,27 @@ pub async fn claim_username(http_client: HttpClient, username: String) -> Result
     parse_response::<responses::ClaimUsername>(&response_text)
 }
 
+/// Get the status of the game API.
+pub async fn get_game_status(http_client: HttpClient) -> Result<responses::GameStatus, GameStatusError> {
+    let http_client = http_client.lock().await;
+    let request_builder = http_client.request_builder(
+        Method::GET,
+        // "https://api.spacetraders.io/game/status".parse().unwrap()
+        "http://localhost:3000/".parse().unwrap()
+    );
+
+    let response = http_client.execute_request(request_builder, None)
+        .await?;
+
+    if response.status() == StatusCode::SERVICE_UNAVAILABLE {
+        return Err(GameStatusError::ServiceUnavailable)
+    }
+
+    let response_text = response.text().await?;
+
+    parse_response::<responses::GameStatus>(&response_text).map_err(|m| m.into())
+}
+
 /// A SpaceTraders client that is associated to a specific username
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -176,20 +198,6 @@ impl Client {
             .await?.text().await?;
 
         parse_response::<responses::FlightPlan>(&response_text)
-    }
-
-    /// Get the status of the game API.
-    pub async fn get_game_status(&self) -> Result<responses::GameStatus, anyhow::Error> {
-        let http_client = self.http_client.lock().await;
-        let request_builder = http_client.request_builder(
-            Method::GET,
-            "https://api.spacetraders.io/game/status".parse().unwrap()
-        );
-
-        let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
-            .await?.text().await?;
-
-        parse_response::<responses::GameStatus>(&response_text)
     }
 
     /// Get all available loans
