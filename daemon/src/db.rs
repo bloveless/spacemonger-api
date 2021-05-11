@@ -425,7 +425,6 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str) ->
             AND from_dsi.system_symbol = to_dsi.system_symbol
             AND llg1.good_symbol = llg2.good_symbol
             AND llg1.location_symbol != llg2.location_symbol
-            AND llg1.price_per_unit < llg2.price_per_unit
     ")
         .bind(location_symbol)
         .map(|row: PgRow| {

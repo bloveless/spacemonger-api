@@ -4,6 +4,7 @@ use spacetraders::shared::Good;
 use chrono::{DateTime, Utc, Duration};
 use crate::{db, funcs};
 use crate::db::DbRoute;
+use std::cmp::{min, max};
 
 #[derive(Debug, Clone)]
 pub enum TickResult {
@@ -134,14 +135,14 @@ impl ShipMachine {
                 let fuel_required = fuel_required.ceil() as i32 - current_fuel;
 
                 let mut new_user_credits = 0;
-                if fuel_required > 0 {
+                if current_fuel < fuel_required {
                     println!("{} -- Ship destined to {} is filling up with {} fuel", self.username, self.destination, fuel_required);
                     let purchase_order = funcs::create_purchase_order(
                         self.client.clone(),
                         self.pg_pool.clone(),
                         &self.ship_id,
                         Good::Fuel,
-                        fuel_required,
+                        fuel_required - current_fuel,
                     ).await?;
 
                     new_user_credits = purchase_order.credits;
@@ -203,12 +204,10 @@ impl ShipMachine {
 
                 let mut new_user_credits = 0;
                 for cargo in ship.cargo {
-                    if cargo.good != Good::Fuel {
-                        println!("{} -- Selling {} goods {} at {}", self.username, cargo.quantity, cargo.good, ship.location.clone().unwrap());
-                        let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &ship.id, cargo.good, cargo.quantity).await?;
+                    println!("{} -- Selling {} goods {} at {}", self.username, cargo.quantity, cargo.good, ship.location.clone().unwrap());
+                    let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &ship.id, cargo.good, cargo.quantity).await?;
 
-                        new_user_credits = sell_order.credits;
-                    }
+                    new_user_credits = sell_order.credits;
                 }
 
                 self.state = ShipState::PickBestTrade;
@@ -232,13 +231,13 @@ impl ShipMachine {
                 ).await?;
 
                 for route in routes {
-                    if route.sell_location_symbol != "OE-XV-91-2"
-                        && route.good != Good::Fuel
-                    {
+                    if route.sell_location_symbol != "OE-XV-91-2" {
                         println!("{} -- Trading {} from {} to {}", self.username, route.good, route.purchase_location_symbol, route.sell_location_symbol);
 
                         self.route = Some(route.to_owned());
                         self.state = ShipState::PurchaseMaxGoodForTrading;
+
+                        return Ok(None);
                     }
                 }
 
@@ -266,7 +265,9 @@ impl ShipMachine {
 
                 println!("{} -- Ship space available {}, fuel required {}, current fuel {}", self.username, ship.space_available, fuel_required.ceil() as i32, current_fuel);
 
-                let room_available_for_trading = ship.space_available - (fuel_required.ceil() as i32 - current_fuel);
+                let fuel_required = max(fuel_required.ceil() as i32 - current_fuel, 0);
+
+                let room_available_for_trading = ship.space_available - fuel_required;
 
                 let volume_per_unit = (db::get_good_volume(self.pg_pool.clone(), route.good).await)
                     .unwrap_or(1);
