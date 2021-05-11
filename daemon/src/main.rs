@@ -159,9 +159,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if user.username.contains("-main") && prev_main_user_credits != user.credits {
                     println!("{} -- Credits {}", user.username, user.credits);
                     prev_main_user_credits = user.credits;
-                }
 
-                // user.process_upgrades();
+                    if user.credits > 500_000 {
+                        if user.ship_machines.len() % 2 == 0 {
+                            match user.purchase_largest_ship("XV".to_string()).await {
+                                Ok(_) => println!("Ship purchased"),
+                                Err(_) => println!("Unable to purchase a new ship")
+                            }
+                        } else {
+                            match user.purchase_largest_ship("OE".to_string()).await {
+                                Ok(_) => println!("Ship purchased"),
+                                Err(_) => println!("Unable to purchase a new ship")
+                            }
+                        }
+                    }
+                }
 
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }

@@ -231,8 +231,8 @@ impl ShipMachine {
                 ).await?;
 
                 for route in routes {
-                    if route.sell_location_symbol != "OE-XV-91-2" {
-                        println!("{} -- Trading {} from {} to {}", self.username, route.good, route.purchase_location_symbol, route.sell_location_symbol);
+                    if route.sell_location_symbol != "OE-XV-91-2" && route.purchase_quantity > 500 {
+                        println!("{} -- Trading {} from {} to {} (purchase quantity {}, sell quantity {})", self.username, route.good, route.purchase_location_symbol, route.sell_location_symbol, route.purchase_quantity, route.sell_quantity);
 
                         self.route = Some(route.to_owned());
                         self.state = ShipState::PurchaseMaxGoodForTrading;
