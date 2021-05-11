@@ -1,201 +1,246 @@
 mod funcs;
 mod db;
+mod user;
+mod machine;
 
-use spacetraders::{game::Game, shared};
-use tokio::time::Duration;
-use std::cmp::min;
-use std::convert::TryFrom;
+use spacetraders::client;
 use std::env;
 use dotenv::dotenv;
-use spacetraders::shared::LoanType;
+use tokio::time::Duration;
+use spacetraders::shared::{LoanType, Good};
+use tokio::sync::mpsc;
+use crate::machine::ShipResponse;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    let args: Vec<String> = env::args().collect();
+    let username_base = env::var("USERNAME_BASE").unwrap();
     let postgres_host = env::var("POSTGRES_HOST").unwrap();
+    let postgres_port = env::var("POSTGRES_PORT").unwrap().parse::<i32>().unwrap();
     let postgres_username = env::var("POSTGRES_USERNAME").unwrap();
     let postgres_password = env::var("POSTGRES_PASSWORD").unwrap();
     let postgres_database = env::var("POSTGRES_DATABASE").unwrap();
+    let enable_scouts = env::var("ENABLE_SCOUTS").unwrap().parse::<bool>().unwrap();
 
-    let mut client = db::get_client(postgres_host, postgres_username, postgres_password, postgres_database).await?;
+    let pg_pool = db::get_db_pool(postgres_host, postgres_port, postgres_username, postgres_password, postgres_database).await?;
 
-    db::run_migrations(&mut client).await?;
+    db::run_migrations(pg_pool.clone()).await?;
 
-    // 1. get user
-    let current_user = db::get_current_user(&mut client).await?;
-    println!("Current user: {:?}", &current_user);
+    // Algorithm. Create the main user account (or get from db). Get the number of locations
+    // in the system. Create (or get from db) X scout accounts (where X is number of locations in
+    // the system). Send each scout account to the location they are assigned.
 
-    let game = Game::new(
-        current_user.username,
-        current_user.token,
-    );
+    let http_client = client::get_http_client();
 
-    // 2. if the user doesn't have enough credits take out a startup loan
-    let mut current_user_info = game.get_user_info().await?;
-    println!("Current user info {:?}", current_user_info);
-    if current_user_info.user.credits == 0 {
-        // assume that if the user has 0 credits that the user needs to take out a loan
-        current_user_info = game.request_new_loan(LoanType::Startup).await?;
+    if funcs::is_api_in_maintenance_mode(http_client.clone()).await {
+        loop {
+            println!("Detected SpaceTraders API in maintenance mode (status code 503). Sleeping for 60 seconds and trying again");
+            tokio::time::sleep(Duration::from_secs(60)).await;
+
+            if !funcs::is_api_in_maintenance_mode(http_client.clone()).await {
+                break;
+            }
+        }
     }
 
-    let location_info = game.get_location_info("OE-PM-TR".to_string()).await?;
-    println!("Location Info {:?}", location_info);
+    // When an API reset occurs all the scouts will being to fail making requests.
+    // As soon as all the scouts fail this pod will restart. Upon restart we will check
+    // if the API is in maintenance mode (status code 503) if it is then we will wait for
+    // maintenance mode to end. After that ends if the main user is unable to make a requests
+    // we can assume that the API has been reset and we need to reset ourselves.
+    let user = user::User::new(http_client.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await;
+    if user.is_err() {
+        db::reset_db(pg_pool.clone()).await?;
+        // Now that the tables have been we will panic so that the pod will restart and the tables will be recreated
+        panic!("Unable to connect using the main user. Assuming an API reset. Backing up data and clearing the database");
+    }
 
-    return Ok(());
+    let mut user = user.unwrap();
 
-    // 3. if the user doesn't have any ships then buy the fastest one that the user can afford
-    if current_user_info.user.ships.len() == 0 {
-        let available_ships = game.get_ships_for_sale().await?;
-        let mut fastest_ship = None;
-        let mut fastest_ship_speed = 0;
-        let mut fastest_ship_location = "".to_string();
-        let mut fastest_ship_price = 0;
+    let system_info = user.get_systems().await?;
 
-        for available_ship in &available_ships.ships {
-            for purchase_location in &available_ship.purchase_locations {
-                if available_ship.speed > fastest_ship_speed && current_user_info.user.credits > purchase_location.price {
-                    fastest_ship_speed = available_ship.speed;
-                    fastest_ship = Some(available_ship);
-                    fastest_ship_location = purchase_location.location.to_owned();
-                    fastest_ship_price = purchase_location.price;
+    for system in &system_info.systems {
+        for location in &system.locations {
+            db::persist_system_location(pg_pool.clone(), system, location).await?;
+        }
+    }
+
+    println!("## Begin System Messages ----------------------------------------------------------");
+    for system in &system_info.systems {
+        for location in &system.locations {
+            if let Some(messages) = &location.messages {
+                for message in messages {
+                    println!("Location: {} Message: {}", location.symbol, message)
                 }
             }
         }
+    }
+    println!("## End System Messages ------------------------------------------------------------");
 
-        if let Some(ship) = fastest_ship {
-            println!("Buying {} for {} at location {}", ship.ship_type.to_owned(), fastest_ship_price, fastest_ship_location);
-            current_user_info = game.purchase_ship(fastest_ship_location, ship.ship_type.to_owned()).await?;
-        } else {
-            panic!("Unable to find a ship for the user to purchase and the user doesn't currently have any ships");
+    let mut user_handles = Vec::new();
+
+    // have two machines
+
+    // a trader machine and a scout machine
+
+    if enable_scouts {
+        let mut scouts: Vec<user::User> = Vec::new();
+
+        for system in &system_info.systems {
+            for location in &system.locations {
+                let scout_user = user::User::new(
+                    http_client.clone(),
+                    pg_pool.clone(),
+                    format!("{}-scout-{}", username_base, location.symbol),
+                    "scout".to_string(),
+                    Some(system.symbol.clone()),
+                    Some(location.symbol.clone()),
+                ).await?;
+
+                scouts.push(scout_user);
+            }
+        }
+
+        for scout in scouts {
+            let pg_pool = pg_pool.clone();
+            user_handles.push(tokio::spawn(async move {
+                let mut scout = scout.clone();
+                let assigned_location = scout.location_symbol.clone().unwrap();
+                // 1. if the user doesn't have enough credits take out a startup loan
+                println!("Scout {} -- user info {:?}", scout.username, scout.info);
+                if scout.info.user.credits == 0 {
+                    println!("Scout {} -- Requesting new {:?} loan", scout.username, LoanType::Startup);
+                    // assume that if the user has 0 credits that the user needs to take out a loan
+                    scout.request_new_loan(LoanType::Startup).await?;
+                }
+
+                // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
+                if scout.info.user.ships.is_empty() {
+                    scout.purchase_fastest_ship(scout.system_symbol.clone().unwrap()).await?;
+                }
+
+                println!("Ship {} -- Found {} ships for user {}", scout.username, scout.info.user.ships.len(), scout.username);
+                if !scout.info.user.ships.is_empty() {
+                    scout.maybe_wait_for_ship_to_arrive(0).await?;
+
+                    scout.fill_ship_with_max_good(0, Good::Fuel).await?;
+
+                    // if the scout isn't at it's assigned location then send it there
+                    scout.send_ship_to_location(0, assigned_location)
+                        .await.expect("Unable to send ship to location");
+
+                    // now start collecting marketplace data every 3 minutes
+                    loop {
+                        println!("Ship {} -- is at {} harvesting marketplace data", scout.username, assigned_location.clone());
+
+                        scout.update_marketplace_data().await?;
+
+                        println!("Ship {} -- is waiting for 3 minutes to get another round of data", scout.username);
+                        tokio::time::sleep(Duration::from_secs(60 * 3)).await;
+                    }
+                }
+
+                Ok::<(), Box<dyn std::error::Error + Send>>(())
+            }));
         }
     }
 
-    // Now that the user account is setup lets begin scanning the system
-    // there should be some criteria to skip this scan but for now we can
-    // just have the ship scan at the beginning of every run.
+    // One task per user, each of those will create new tasks for each of it's ships
+    // The main task will handle upgrades by checking the users credits and ships periodically
+    // The main task will be able to create new ships and push them into the ship_handles array to
+    // be awaited upon later
+    // That's all that we need for creating new ships, but upgrading ships we need to be able to
+    // notify a ship task that it needs to be upgraded
 
-    // potentially we only need to make a full system scan if there are any locations that we don't have any market data for
-
-    for loan in current_user_info.user.loans {
-        // pay the loan off if we have enough left over afterward
-        if current_user_info.user.credits > loan.repayment_amount * 2 {
-            current_user_info = game.pay_off_loan(loan.id).await?;
-        }
-    }
-
-    println!("-------------------------------------------------------------------------------");
-    println!("BEGINNING SYSTEM SCAN ---------------------------------------------------------");
-    println!("-------------------------------------------------------------------------------");
-
-    // let fastest_ship = funcs::get_fastest_ship(&game).await?.unwrap();
-    // println!("Fastest Ship: {:?}", &fastest_ship);
-    //
-    // funcs::scan_system(&game, fastest_ship.clone(), &mut client).await?;
-
-    // rather than scanning the system just go here
-    // https://spacetrader-38625.web.app/ and pick a good trade so we can get started
-
-    // now that the system scan is complete pick the most profitable trade route and crush it
-
-    println!("-------------------------------------------------------------------------------");
-    println!("RUNNING TRADE ROUTE -----------------------------------------------------------");
-    println!("-------------------------------------------------------------------------------");
-
-    let mut fastest_ship = funcs::get_fastest_ship(&game).await?.unwrap();
-    let buy_location = "OE-PM".to_string();
-    let sell_location = "OE-PM-TR".to_string();
-    let good_symbol = shared::Good::Workers;
-
-    loop {
-        // get ship to 20 fuel
-        // let ship_info = game.get_your_ships().await?;
-        // let mut ship_info = ship_info.ships.iter().find(|s| s.id == fastest_ship.id).unwrap().to_owned();
-
-        let ship_fuel = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == shared::Good::Fuel { sum + cargo.quantity } else { sum });
-        println!("Current ship fuel: {}", ship_fuel);
-
-        if ship_fuel < 20 {
-            println!("Purchasing {} fuel", 20 - ship_fuel);
-            game.create_purchase_order(fastest_ship.clone(), shared::Good::Fuel, 20 - ship_fuel).await?;
-            fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
+    user_handles.push(tokio::spawn(async move {
+        // 1. if the user doesn't have enough credits take out a startup loan
+        if user.info.user.credits == 0 {
+            println!("User {} -- Requesting new {:?} loan", user.username, LoanType::Startup);
+            // assume that if the user has 0 credits that the user needs to take out a loan
+            user.request_new_loan(LoanType::Startup).await?;
         }
 
-        // go to pickup location
-        println!("Going to pickup location {}", buy_location);
-        if fastest_ship.location != Some(buy_location.to_owned()) {
-            let flight_plan = funcs::create_flight_plan(&game, &mut client, &fastest_ship, buy_location.to_owned()).await?;
-            fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-            println!("Flight plan: {:?}", &flight_plan);
-            println!("Waiting {} seconds", flight_plan.flight_plan.time_remaining_in_seconds + 2);
-
-            tokio::time::sleep(Duration::from_secs(u64::try_from(flight_plan.flight_plan.time_remaining_in_seconds + 2).unwrap())).await;
+        // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
+        if user.info.user.ships.is_empty() {
+            user.purchase_fastest_ship("OE".to_string()).await?;
         }
 
-        // get ship to 20 fuel
-        let ship_fuel = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == shared::Good::Fuel { sum + cargo.quantity } else { sum });
-        println!("Current ship fuel: {}", ship_fuel);
+        let (tx, mut rx) = mpsc::channel::<ShipResponse>(32);
 
-        if ship_fuel < 20 {
-            println!("Purchasing {} fuel", 20 - ship_fuel);
-            game.create_purchase_order(fastest_ship.clone(), shared::Good::Fuel, 20 - ship_fuel).await?;
+        let mut ship_handles = Vec::new();
+        for ship in user.info.user.ships {
+            let user = user.clone();
+            let ship = ship.clone();
+            let ship_tx = tx.clone();
+            ship_handles.push(tokio::spawn(async move {
+                let mut ship = machine::Ship::new(
+                    http_client.clone(),
+                    pg_pool.clone(),
+                    user.username,
+                    user.token,
+                    ship.id.clone(),
+                    machine::ShipAssignment::Trader,
+                    ship,
+                    ship_tx
+                );
+
+                // Reset the main user ship
+                ship.sell_all_cargo().await?;
+
+                Ok::<(), Box<dyn std::error::Error + Send>>(())
+            }));
         }
 
-        fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-
-        println!("Fastest ship: {:?}", fastest_ship);
-
-        // buy as much good as possible
-        println!("Space available: {}", fastest_ship.space_available);
-
-        let user_credits = game.get_user_info().await?.user.credits;
-        println!("Current user credits: {}", user_credits);
-        let marketplace_info = game.get_location_marketplace(buy_location.to_owned()).await?;
-
-        let good = marketplace_info.location.marketplace.iter().find(|d| d.symbol == good_symbol).unwrap();
-        println!("Good cost: {}", good.price_per_unit);
-        let max_good_to_buy = user_credits / good.price_per_unit;
-        println!("Max good to buy based on cost: {}", max_good_to_buy);
-
-        let max_good_by_volume = fastest_ship.space_available / good.volume_per_unit;
-        println!("Max good available to buy based on space available: {}", max_good_by_volume);
-
-        let actual_good_to_buy = min(max_good_to_buy, max_good_by_volume);
-        println!("Actual good to buy: {}", actual_good_to_buy);
-
-        if actual_good_to_buy > 0 {
-            let purchase_response = game.create_purchase_order(fastest_ship.clone(), good_symbol.clone(), actual_good_to_buy).await?;
-            println!("Good purchase response: {:?}", purchase_response);
-        } else {
-            println!("Not purchasing anything...");
+        while let Some(message) = rx.recv().await {
+            println!("GOT = {:?}", message);
         }
 
-        fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
+        loop {
+            // main user will find the best trade from their current location
+            // we are only working with one ship so we'll just user the main users first ship
+            let routes = user.get_routes_for_ship(0).await?;
+            let best_route = routes.get(0);
 
-        // go to OE-A1-M1
-        if fastest_ship.location != Some(sell_location.to_owned()) {
-            println!("Going to sell location: {}", sell_location);
-            let flight_plan = funcs::create_flight_plan(&game, &mut client, &fastest_ship, sell_location.to_owned()).await?;
-            fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-            println!("Flight plan: {:?}", &flight_plan);
-            println!("Waiting {} seconds", flight_plan.flight_plan.time_remaining_in_seconds + 2);
+            // TODO: It is possible that the best_route doesn't have enough quantity to make a full
+            //       trade so maybe pick the second best route if there isn't enough quantity at the
+            //       from location
 
-            tokio::time::sleep(Duration::from_secs(u64::try_from(flight_plan.flight_plan.time_remaining_in_seconds + 2).unwrap())).await;
+            if let Some(best_route) = best_route {
+                println!("Good to trade {:?}", best_route.good);
+                println!("Location to trade at {}", best_route.sell_location_symbol);
+
+                // fill ship with enough fuel to get to the other location
+                let fuel_required = best_route.fuel_required.ceil() as i32;
+
+                // We don't have to move the ship to the purchase location because we got the routes
+                // specifically for the location that this ship is already in
+
+                println!("Route requires {} fuel", fuel_required);
+
+                user.ensure_ship_has_enough_fuel(0, fuel_required).await?;
+
+                // make purchase
+                user.fill_ship_with_max_good(0, best_route.good).await?;
+
+                user.send_ship_to_location(0, best_route.sell_location_symbol.clone()).await?;
+
+                // sell and repeat
+                user.sell_max_good(0, best_route.good).await?;
+
+                // TODO: Keep track of users credits through time
+                //       Keep track of users flight plans, purchases, sells, and routes (cdv)
+
+                // TODO: Automated upgrades. When credits hits X amount purchase a new ship
+                //       When credits hits X amount upgrade a type of ship to another type of ship
+                //       This will also require us to actually manage more that one ship at a time
+            }
         }
 
-        // sell all good
-        let current_good_in_cargo = fastest_ship.cargo.iter().fold(0, |sum, cargo| if cargo.good == good_symbol { sum + cargo.quantity } else { sum });
+        futures::future::join_all(ship_handles).await;
+    }));
 
-        if current_good_in_cargo > 0 {
-            println!("Selling {} good cargo", current_good_in_cargo);
-            let sell_response = game.create_sell_order(fastest_ship.id.to_string(), good_symbol.clone(), current_good_in_cargo).await?;
-            fastest_ship = funcs::get_ship(&game, fastest_ship.id).await?.unwrap();
-            println!("Sell response: {:?}", sell_response);
-        } else {
-            println!("Didn't find any good in cargo to sell...");
-        }
-    }
+    futures::future::join_all(user_handles).await;
 
     Ok(())
 }

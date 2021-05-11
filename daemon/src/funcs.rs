@@ -1,5 +1,10 @@
-use spacetraders::client::{self, HttpClient};
+use spacetraders::client::{self, HttpClient, Client};
 use spacetraders::errors::GameStatusError;
+use sqlx::PgPool;
+use spacetraders::responses;
+use crate::db;
+use spacetraders::shared::Good;
+use crate::db::DbRoute;
 
 pub async fn is_api_in_maintenance_mode(http_client: HttpClient) -> bool {
     let game_status = client::get_game_status(http_client.clone()).await;
@@ -11,4 +16,58 @@ pub async fn is_api_in_maintenance_mode(http_client: HttpClient) -> bool {
     }
 
     false
+}
+
+pub async fn create_flight_plan(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, destination: &str) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
+    let flight_plan = client.create_flight_plan(ship_id.to_string(), destination.to_string()).await?;
+
+    db::persist_flight_plan(pg_pool, user_id, ship_id, &flight_plan).await?;
+
+    Ok(flight_plan)
+}
+
+pub async fn create_purchase_order(client: Client, pg_pool: PgPool, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
+    let purchase_order = client.create_purchase_order(ship_id.to_string(), good, quantity).await?;
+
+    // TODO: Save purchase order to db
+
+    Ok(purchase_order)
+}
+
+pub async fn create_sell_order(client: Client, pg_pool: PgPool, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
+    let sell_order = client.create_sell_order(ship_id.to_string(), good, quantity).await?;
+
+    // TODO: Save sell order to db
+
+    Ok(sell_order)
+}
+
+pub async fn get_fuel_required_for_trip(pg_pool: PgPool, origin: &str, destination: &str, ship_type: &str) -> Result<f64, Box<dyn std::error::Error>> {
+    let distance_between = db::get_distance_between_locations(pg_pool, origin, destination).await?;
+
+    // https://discord.com/channels/792864705139048469/792864705139048472/839919413742272572
+    // floor((cargo - fuelRequired) / volume) * (sell - buy) / time
+    // https://discord.com/channels/792864705139048469/792864705139048472/836090525307371541
+    // time = distance * (2 / speed) + 60
+    let planet_penalty = if distance_between.origin_location_type == "Planet" { 2.0 } else { 0.0 };
+    let fuel_required: f64 = (distance_between.distance.round() / 4.0) + planet_penalty + 1.0;
+
+    let ship_fuel_penalty = match ship_type {
+        "GR-MK-II" => 1.0,
+        "GR-MK-III" => 2.0,
+        _ => 0.0,
+    };
+
+    Ok(fuel_required + ship_fuel_penalty)
+}
+
+pub async fn get_routes_for_ship(pg_pool: PgPool, ship_origin: &str) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
+    // TODO: Getting the best route only from the location that the ship currently is in locks
+    //       the ship into trade loops. It might be better to search the entire system for the
+    //       best route and then find the best trade to that location before beginning a trade
+    //       route. That way we move around the system a little more
+    match db::get_routes_from_location(pg_pool.clone(), &ship_origin).await {
+        Ok(routes) => return Ok(routes),
+        Err(e) => panic!("Unable to get routes for ship {:?}", e),
+    };
 }

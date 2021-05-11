@@ -90,6 +90,39 @@ pub enum Good {
     /// Narcotics
     #[serde(rename = "NARCOTICS")]
     Narcotics,
+    /// Unknown is used when a string can't be converted to a known good
+    Unknown
+}
+
+impl From<String> for Good {
+    fn from(good: String) -> Self {
+        match good.as_str() {
+            "Metals" => Good::Metals,
+            "RareMetals" => Good::RareMetals,
+            "Chemicals" => Good::Chemicals,
+            "Fuel" => Good::Fuel,
+            "Food" => Good::Food,
+            "Drones" => Good::Drones,
+            "Textiles" => Good::Textiles,
+            "ConsumerGoods" => Good::ConsumerGoods,
+            "Machinery" => Good::Machinery,
+            "ConstructionMaterials" => Good::ConstructionMaterials,
+            "Electronics" => Good::Electronics,
+            "Research" => Good::Research,
+            "ShipParts" => Good::ShipParts,
+            "ShipPlating" => Good::ShipPlating,
+            "FusionReactors" => Good::FusionReactors,
+            "ExoticPlasma" => Good::ExoticPlasma,
+            "UnstableCompounds" => Good::UnstableCompounds,
+            "ProteinSynthesizers" => Good::ProteinSynthesizers,
+            "BiometricFirearms" => Good::BiometricFirearms,
+            "Explosives" => Good::Explosives,
+            "Nanobots" => Good::Nanobots,
+            "PrecisionInstruments" => Good::PrecisionInstruments,
+            "Narcotics" => Good::Narcotics,
+            _ => Good::Unknown
+        }
+    }
 }
 
 impl fmt::Display for Good {
@@ -244,6 +277,9 @@ pub struct ShipForSale {
     /// The locations that this ship can be purchased at
     #[serde(rename = "purchaseLocations")]
     pub purchase_locations: Vec<PurchaseLocation>,
+    /// The goods that this ship is restricted to carrying
+    #[serde(rename = "restrictedGoods")]
+    pub restricted_goods: Option<Vec<Good>>,
 }
 
 /// A representation of a location in a system
@@ -384,6 +420,8 @@ pub struct MarketplaceData {
     /// How much of the good is available at this location
     #[serde(rename = "quantityAvailable")]
     pub quantity_available: i32,
+    /// DEPRECATED: Spread
+    pub spread: i32,
 }
 
 /// Available structure types

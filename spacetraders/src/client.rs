@@ -51,8 +51,15 @@ impl SpaceTradersClient {
                         .parse().unwrap();
 
                     // If it was a throttle then wait based on the retry-after response headers
-                    println!("Rate limited... waiting for {} seconds before trying again", retry_after);
+                    println!("Rate limited... waiting for {} seconds before trying again. Request: \"{} {}\"", retry_after, request.method(), request.url());
                     tokio::time::sleep(Duration::from_secs_f64(retry_after)).await;
+
+                    // Now if there is an error then pass that error along
+                    self.client.execute(request).await
+                } else if response.status() == 500 {
+                    // If there was an internal server error then try the request again in 2 seconds
+                    println!("Caught internal server error retrying in 2 second");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
 
                     // Now if there is an error then pass that error along
                     self.client.execute(request).await
@@ -161,12 +168,12 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `id` - A string containing the flight plan id
-    pub async fn get_flight_plan(&self, id: String) -> Result<responses::FlightPlan, anyhow::Error> {
+    /// * `flight_plan_id` - A string containing the flight plan id
+    pub async fn get_flight_plan(&self, flight_plan_id: String) -> Result<responses::FlightPlan, anyhow::Error> {
         let http_client = self.http_client.lock().await;
         let request_builder = http_client.request_builder(
             Method::GET,
-            format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, id).parse().unwrap(),
+            format!("https://api.spacetraders.io/users/{}/flight-plans/{}", self.username, flight_plan_id).parse().unwrap(),
         );
 
         let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
@@ -183,8 +190,8 @@ impl Client {
     /// * `destination` - A string containing the location to send the ship to
     pub async fn create_flight_plan(&self, ship_id: String, destination: String) -> Result<responses::FlightPlan, anyhow::Error> {
         let flight_plan_request = requests::FlightPlanRequest {
-            ship_id,
-            destination,
+            ship_id: ship_id.clone(),
+            destination: destination.clone(),
         };
 
         let http_client = self.http_client.lock().await;
@@ -275,12 +282,12 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `location` - A string containing the location name to get info about
-    pub async fn get_location_info(&self, location: String) -> Result<responses::LocationInfo, anyhow::Error> {
+    /// * `location_symbol` - A string containing the location name to get info about
+    pub async fn get_location_info(&self, location_symbol: String) -> Result<responses::LocationInfo, anyhow::Error> {
         let http_client = self.http_client.lock().await;
         let request_builder = http_client.request_builder(
             Method::GET,
-                format!("https://api.spacetraders.io/game/locations/{}", location).parse().unwrap()
+                format!("https://api.spacetraders.io/game/locations/{}", location_symbol).parse().unwrap()
         );
 
         let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
@@ -293,9 +300,9 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `system` - A string containing the system name to get the locations from
+    /// * `system_symbol` - A string containing the system name to get the locations from
     /// * `location_type` - An optional LocationType if you want to filter the locations by type
-    pub async fn get_locations_in_system(&self, system: String, location_type: Option<shared::LocationType>) -> Result<responses::AvailableLocations, anyhow::Error> {
+    pub async fn get_locations_in_system(&self, system_symbol: String, location_type: Option<shared::LocationType>) -> Result<responses::AvailableLocations, anyhow::Error> {
         let mut query = Vec::new();
         if let Some(location_type) = location_type {
             query.push(("type", location_type));
@@ -304,7 +311,7 @@ impl Client {
         let http_client = self.http_client.lock().await;
         let request_builder = http_client.request_builder(
             Method::GET,
-                format!("https://api.spacetraders.io/game/systems/{}/locations", system).parse().unwrap()
+                format!("https://api.spacetraders.io/game/systems/{}/locations", system_symbol).parse().unwrap()
         )
             .query(&query);
 
@@ -322,12 +329,12 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `location` - A string containing the name of the location to get marketplace data for
-    pub async fn get_location_marketplace(&self, location: String) -> Result<responses::LocationMarketplace, anyhow::Error> {
+    /// * `location_symbol` - A string containing the name of the location to get marketplace data for
+    pub async fn get_location_marketplace(&self, location_symbol: &str) -> Result<responses::LocationMarketplace, anyhow::Error> {
         let http_client = self.http_client.lock().await;
         let request_builder = http_client.request_builder(
             Method::GET,
-                format!("https://api.spacetraders.io/game/locations/{}/marketplace", location).parse().unwrap()
+                format!("https://api.spacetraders.io/game/locations/{}/marketplace", location_symbol).parse().unwrap()
         );
 
         let response_text = http_client.execute_request(request_builder, Some(self.token.clone()))
@@ -343,9 +350,9 @@ impl Client {
     /// * `ship` - A Ship struct that you'd like to transfer the goods into
     /// * `good` - A Good enum containing the type of good you'd like to transfer
     /// * `quantity` - An i32 containing the quantity of good you'd like transferred
-    pub async fn create_purchase_order(&self, ship: shared::Ship, good: shared::Good, quantity: i32) -> Result<responses::PurchaseOrder, anyhow::Error> {
+    pub async fn create_purchase_order(&self, ship_id: String, good: shared::Good, quantity: i32) -> Result<responses::PurchaseOrder, anyhow::Error> {
         let purchase_order_request = requests::PurchaseOrderRequest {
-            ship_id: ship.id.to_owned(),
+            ship_id: ship_id.clone(),
             good,
             quantity,
         };
@@ -373,7 +380,7 @@ impl Client {
     /// * `quantity` - An i32 containing the quantity of good you'd like transferred
     pub async fn create_sell_order(&self, ship_id: String, good: shared::Good, quantity: i32) -> Result<responses::PurchaseOrder, anyhow::Error> {
         let sell_order_request = requests::SellOrderRequest {
-            ship_id,
+            ship_id: ship_id.clone(),
             good,
             quantity,
         };
@@ -395,12 +402,12 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `location` - A string containing the location you'd like to purchase the ship from
+    /// * `location_symbol` - A string containing the location you'd like to purchase the ship from
     /// * `ship_type` - A string containing the type of ship you'd like to purchase
-    pub async fn purchase_ship(&self, location: String, ship_type: String) -> Result<responses::PurchaseShip, anyhow::Error> {
+    pub async fn purchase_ship(&self, location_symbol: String, ship_type: String) -> Result<responses::PurchaseShip, anyhow::Error> {
         let purchase_ship_request = requests::PurchaseShipRequest {
-            location,
-            ship_type,
+            location: location_symbol.clone(),
+            ship_type: ship_type.clone(),
         };
 
         let http_client = self.http_client.lock().await;

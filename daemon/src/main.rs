@@ -1,16 +1,14 @@
 mod funcs;
 mod db;
 mod user;
+mod ship_machine;
 
 use spacetraders::client;
 use std::env;
 use dotenv::dotenv;
 use tokio::time::Duration;
-use std::convert::{TryInto, TryFrom};
-use spacetraders::shared::{LoanType, Good};
-use chrono::Utc;
-use crate::user::User;
-use spacetraders::errors::GameStatusError;
+use spacetraders::shared::LoanType;
+use crate::ship_machine::{TickResult, ShipAssignment};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,6 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let postgres_username = env::var("POSTGRES_USERNAME").unwrap();
     let postgres_password = env::var("POSTGRES_PASSWORD").unwrap();
     let postgres_database = env::var("POSTGRES_DATABASE").unwrap();
+    let enable_scouts = env::var("ENABLE_SCOUTS").unwrap().parse::<bool>().unwrap();
 
     let pg_pool = db::get_db_pool(postgres_host, postgres_port, postgres_username, postgres_password, postgres_database).await?;
 
@@ -49,16 +48,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // if the API is in maintenance mode (status code 503) if it is then we will wait for
     // maintenance mode to end. After that ends if the main user is unable to make a requests
     // we can assume that the API has been reset and we need to reset ourselves.
-    let main_user = User::new(http_client.clone(), pg_pool.clone(), format!("{}-main", username_base), "main".to_string(), None, None).await;
-    if main_user.is_err() {
+    let user = user::User::new(
+        http_client.clone(),
+        pg_pool.clone(),
+        format!("{}-main", username_base),
+        ShipAssignment::Trader
+    ).await;
+    if user.is_err() {
         db::reset_db(pg_pool.clone()).await?;
-        // Now that the tables have been we will panic so that the pod will restart and the tables will be recreated
+        // Now that the tables have been moved we will panic so that the pod will restart and the tables will be recreated
         panic!("Unable to connect using the main user. Assuming an API reset. Backing up data and clearing the database");
     }
 
-    let mut main_user = main_user.unwrap();
+    let mut user = user.unwrap();
 
-    let system_info = main_user.get_systems().await?;
+    let system_info = user.get_systems().await?;
 
     for system in &system_info.systems {
         for location in &system.locations {
@@ -78,70 +82,93 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("## End System Messages ------------------------------------------------------------");
 
-    let mut scouts: Vec<User> = Vec::new();
+    let mut users = Vec::new();
+    let mut user_handles = Vec::new();
 
-    for system in &system_info.systems {
-        for location in &system.locations {
-            let scout_user = User::new(
-                http_client.clone(),
-                pg_pool.clone(),
-                format!("{}-scout-{}", username_base, location.symbol),
-                "scout".to_string(),
-                Some(system.symbol.to_owned()),
-                Some(location.symbol.to_owned()),
-            ).await?;
+    if enable_scouts {
+        for system in &system_info.systems {
+            for location in &system.locations {
+                let mut scout_user = user::User::new(
+                    http_client.clone(),
+                    pg_pool.clone(),
+                    format!("{}-scout-{}", username_base, location.symbol),
+                    ShipAssignment::Scout {
+                        system_symbol: system.symbol.clone(),
+                        location_symbol: location.symbol.clone()
+                    },
+                ).await?;
 
-            scouts.push(scout_user);
+                // 1. if the user doesn't have enough credits take out a startup loan
+                println!("Scout {} -- credits {}", scout_user.username, scout_user.credits);
+                if scout_user.credits == 0 {
+                    println!("Scout {} -- Requesting new {:?} loan", scout_user.username, LoanType::Startup);
+                    // assume that if the user has 0 credits that the user needs to take out a loan
+                    scout_user.request_new_loan(LoanType::Startup).await?;
+                }
+
+                // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
+                if scout_user.ship_machines.is_empty() {
+                    scout_user.purchase_fastest_ship(system.symbol.clone()).await?;
+                }
+
+                users.push(scout_user);
+            }
         }
     }
 
-    main_user.update_user_info().await;
-    println!("Main user info: {:?}", main_user.info);
+    // One task per user, each of those will create new tasks for each of it's ships
+    // The main task will handle upgrades by checking the users credits and ships periodically
+    // The main task will be able to create new ships and push them into the ship_handles array to
+    // be awaited upon later
+    // That's all that we need for creating new ships, but upgrading ships we need to be able to
+    // notify a ship task that it needs to be upgraded
 
-    let mut handles = Vec::new();
+    // Setup our main user
+    // 1. if the user doesn't have enough credits take out a startup loan
+    if user.credits == 0 {
+        println!("User {} -- Requesting new {:?} loan", user.username, LoanType::Startup);
+        // assume that if the user has 0 credits that the user needs to take out a loan
+        user.request_new_loan(LoanType::Startup).await?;
+    }
 
-    for scout in scouts {
-        let pg_pool = pg_pool.clone();
-        handles.push(tokio::spawn(async move {
-            let mut scout = scout.clone();
-            let assigned_location = scout.location_symbol.clone().unwrap();
-            // 1. if the user doesn't have enough credits take out a startup loan
-            println!("Scout {} -- user info {:?}", scout.username, scout.info);
-            if scout.info.user.credits == 0 {
-                println!("Scout {} -- Requesting new {:?} loan", scout.username, LoanType::Startup);
-                // assume that if the user has 0 credits that the user needs to take out a loan
-                scout.request_new_loan(LoanType::Startup).await?;
-            }
+    // 2. if the user doesn't have any ships then buy the largest one that the user can afford that is in the XV system
+    if user.ship_machines.is_empty() {
+        user.purchase_largest_ship("XV".to_string()).await?;
+    }
 
-            // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
-            if scout.info.user.ships.is_empty() {
-                scout.purchase_fastest_ship().await?;
-            }
+    users.push(user);
 
-            println!("Scout {} -- Found {} ships for user {}", scout.username, scout.info.user.ships.len(), scout.username);
-            if !scout.info.user.ships.is_empty() {
-                scout.maybe_wait_for_ship_to_arrive(0).await?;
+    for user in users {
+        let mut user = user.clone();
+        user_handles.push(tokio::spawn(async move {
+            let mut prev_main_user_credits = 0;
+            loop {
+                for machine in &mut user.ship_machines {
+                    let tick_result = machine.tick().await;
 
-                // if the scout isn't at it's assigned location then send it there
-                scout.send_ship_to_location(pg_pool.clone(), 0, assigned_location.clone())
-                    .await.expect("Unable to send ship to location");
-
-                // now start collecting marketplace data every 10 minutes
-                loop {
-                    println!("Scout {} -- is at {} harvesting marketplace data", scout.username, assigned_location.clone());
-
-                    scout.update_marketplace_data().await?;
-
-                    println!("Scout {} -- is waiting for 10 minutes to get another round of data", scout.username);
-                    tokio::time::sleep(Duration::from_secs(60 * 10)).await;
+                    // TODO: Maybe there will be some signals that come back from the tick
+                    //       function that we should close and respawn the task... or handle errors
+                    //       or something like that
+                    if let Some(tick_result) = tick_result.unwrap_or(None) {
+                        match tick_result {
+                            TickResult::UpdateCredits(credits) => user.credits = credits,
+                        }
+                    }
                 }
-            }
 
-            Ok::<(), Box<dyn std::error::Error + Send>>(())
+                if user.username.contains("-main") && prev_main_user_credits != user.credits {
+                    println!("{} -- Credits {}", user.username, user.credits);
+                    prev_main_user_credits = user.credits;
+                }
+
+                // user.process_upgrades();
+
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
         }));
     }
 
-    futures::future::join_all(handles).await;
+    futures::future::join_all(user_handles).await;
 
     Ok(())
 }

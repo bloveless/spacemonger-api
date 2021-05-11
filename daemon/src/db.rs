@@ -2,15 +2,18 @@ use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Row, PgPool};
 use chrono::{Utc, DateTime};
+use std::cmp::Ordering::Equal;
+use spacetraders::shared::Good;
+use crate::ship_machine::ShipAssignment;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ship {
     pub id: String,
     pub username: String,
     pub token: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DbUser {
     pub id: String,
     pub username: String,
@@ -20,7 +23,7 @@ pub struct DbUser {
     pub location_symbol: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DbSystemLocation {
     pub system_symbol: String,
     pub system_name: String,
@@ -30,6 +33,28 @@ pub struct DbSystemLocation {
     pub x: i32,
     pub y: i32,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DbRoute {
+    pub purchase_location_symbol: String,
+    pub purchase_location_type: String,
+    pub sell_location_symbol: String,
+    pub good: Good,
+    pub distance: f64,
+    pub purchase_quantity: i32,
+    pub sell_quantity: i32,
+    pub purchase_price_per_unit: i32,
+    pub sell_price_per_unit: i32,
+    pub volume_per_unit: i32,
+    pub fuel_required: f64,
+    pub cost_volume_distance: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DbDistanceBetweenLocations {
+    pub origin_location_type: String,
+    pub distance: f64,
 }
 
 pub async fn get_db_pool(host: String, port: i32, username: String, password: String, database: String) -> Result<PgPool, Box<dyn std::error::Error>> {
@@ -92,7 +117,23 @@ pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<DbUser
     )
 }
 
-pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: String, system_symbol: Option<String>, location_symbol: Option<String>) -> Result<DbUser, Box<dyn std::error::Error>> {
+pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: ShipAssignment) -> Result<DbUser, Box<dyn std::error::Error>> {
+    let assignment_type;
+    let assignment_system_symbol;
+    let assignment_location_symbol;
+    match assignment {
+        ShipAssignment::Scout { system_symbol, location_symbol} => {
+            assignment_type = "scout";
+            assignment_system_symbol = Some(system_symbol);
+            assignment_location_symbol = Some(location_symbol);
+        },
+        ShipAssignment::Trader => {
+            assignment_type = "trader";
+            assignment_system_symbol = None;
+            assignment_location_symbol = None;
+        }
+    }
+
     Ok(
         sqlx::query("
             INSERT INTO daemon_users (username, token, assignment, system_symbol, location_symbol)
@@ -101,9 +142,9 @@ pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assi
         ")
             .bind(&username)
             .bind(&token)
-            .bind(&assignment)
-            .bind(&system_symbol)
-            .bind(&location_symbol)
+            .bind(&assignment_type)
+            .bind(&assignment_system_symbol)
+            .bind(&assignment_location_symbol)
             .map(|row: PgRow| {
                 DbUser {
                     id: row.get("id"),
@@ -145,7 +186,7 @@ pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsIn
     Ok(())
 }
 
-pub async fn persist_flight_plan(pg_pool: PgPool, user_id: String, ship: &shared::Ship, flight_plan: &responses::FlightPlan) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_flight_plan(pg_pool: PgPool, user_id: &str, ship_id: &str, flight_plan: &responses::FlightPlan) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
         INSERT INTO daemon_flight_plans (
              id
@@ -153,22 +194,18 @@ pub async fn persist_flight_plan(pg_pool: PgPool, user_id: String, ship: &shared
             ,ship_id
             ,origin
             ,destination
-            ,ship_cargo_volume
-            ,ship_cargo_volume_max
             ,distance
             ,fuel_consumed
             ,fuel_remaining
             ,time_remaining_in_seconds
             ,arrives_at
-        ) VALUES ($1, uuid($2), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+        ) VALUES ($1, uuid($2), $3, $4, $5, $6, $7, $8, $9, $10);
     ")
         .bind(&flight_plan.flight_plan.id)
         .bind(&user_id)
-        .bind(&ship.id)
+        .bind(&ship_id)
         .bind(&flight_plan.flight_plan.departure)
         .bind(&flight_plan.flight_plan.destination)
-        .bind(&ship.cargo.iter().fold(0, |sum, cargo| sum + cargo.total_volume))
-        .bind(&ship.max_cargo)
         .bind(&flight_plan.flight_plan.distance)
         .bind(&flight_plan.flight_plan.fuel_consumed)
         .bind(&flight_plan.flight_plan.fuel_remaining)
@@ -213,7 +250,34 @@ pub async fn get_system_location(pg_pool: PgPool, location_symbol: String) -> Re
     )
 }
 
-pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Result<Option<shared::FlightPlanData>, Box<dyn std::error::Error>> {
+pub async fn get_distance_between_locations(pg_pool: PgPool, origin: &str, destination: &str) -> Result<DbDistanceBetweenLocations, Box<dyn std::error::Error>> {
+    Ok(
+        sqlx::query("
+            SELECT
+                 dsi1.location_type as origin_location_type
+                ,SQRT(POW(dsi1.x - dsi2.x, 2) + POW(dsi1.y - dsi2.y, 2)) AS distance
+            FROM daemon_system_info dsi1
+            INNER JOIN daemon_system_info dsi2
+                -- for now we are going to restrict this to the same system since we don't have
+                -- multiple stops built yet
+                ON dsi1.system_symbol = dsi2.system_symbol
+            WHERE dsi1.location_symbol = $1
+                AND dsi2.location_symbol = $2;
+        ")
+            .bind(origin)
+            .bind(destination)
+            .map(|row: PgRow| {
+                DbDistanceBetweenLocations {
+                    origin_location_type: row.get("origin_location_type"),
+                    distance: row.get("distance"),
+                }
+            })
+            .fetch_one(&pg_pool)
+            .await?
+    )
+}
+
+pub async fn get_active_flight_plan(pg_pool: PgPool, ship_id: &str) -> Result<Option<shared::FlightPlanData>, Box<dyn std::error::Error>> {
     Ok(
         sqlx::query("
             SELECT
@@ -232,7 +296,7 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Res
             WHERE ship_id = $1
                 AND arrives_at > $2
         ")
-            .bind(&ship.id)
+            .bind(ship_id)
             .bind(&Utc::now())
             .map(|row: PgRow| {
                 shared::FlightPlanData {
@@ -254,12 +318,12 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship: &shared::Ship) -> Res
     )
 }
 
-pub async fn persist_market_data(pg_pool: PgPool, location_symbol: String, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
         INSERT INTO daemon_market_data(location_symbol, good_symbol, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
         VALUES ($1, $2, $3, $4, $5, $6, $7);
     ")
-        .bind(&location_symbol)
+        .bind(location_symbol)
         .bind(&marketplace_data.symbol.to_string())
         .bind(&marketplace_data.price_per_unit)
         .bind(&marketplace_data.volume_per_unit)
@@ -270,4 +334,151 @@ pub async fn persist_market_data(pg_pool: PgPool, location_symbol: String, marke
         .await?;
 
     Ok(())
+}
+
+pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
+    let mut transaction = pg_pool.begin().await.unwrap();
+
+    sqlx::query("DROP TABLE IF EXISTS tmp_latest_location_goods;")
+        .execute(&mut transaction)
+        .await?;
+
+    sqlx::query("
+        CREATE TEMPORARY TABLE tmp_latest_location_goods (
+             location_symbol VARCHAR(100) NOT NULL
+            ,location_type VARCHAR(100) NOT NULL
+            ,x INT NOT NULL
+            ,y INT NOT NULL
+            ,good_symbol VARCHAR(100) NOT NULL
+            ,quantity_available INT NOT NULL
+            ,price_per_unit INT NOT NULL
+            ,volume_per_unit INT NOT NULL
+            ,created_at TIMESTAMP WITH TIME ZONE NOT NULL
+        );
+    ")
+        .execute(&mut transaction)
+        .await?;
+
+    sqlx::query("
+        -- Get the latest market data from each good in each location
+        WITH ranked_location_goods AS (
+            SELECT
+                 id
+                ,ROW_NUMBER() OVER (
+                    PARTITION BY location_symbol, good_symbol
+                    ORDER BY created_at DESC
+                ) AS rank
+            FROM daemon_market_data
+        )
+        INSERT INTO tmp_latest_location_goods (
+             location_symbol
+            ,location_type
+            ,x
+            ,y
+            ,good_symbol
+            ,quantity_available
+            ,price_per_unit
+            ,volume_per_unit
+            ,created_at
+        )
+        SELECT
+             dmd.location_symbol
+            ,dsi.location_type
+            ,dsi.x
+            ,dsi.y
+            ,dmd.good_symbol
+            ,dmd.quantity_available
+            ,dmd.price_per_unit
+            ,dmd.volume_per_unit
+            ,dmd.created_at
+        FROM daemon_market_data dmd
+        INNER JOIN ranked_location_goods rlg ON dmd.id = rlg.id
+        INNER JOIN daemon_system_info dsi on dmd.location_symbol = dsi.location_symbol
+        WHERE rlg.rank = 1
+            AND dmd.created_at > (now() at time zone 'utc' - INTERVAL '30 min')
+        ORDER BY dmd.good_symbol, dmd.location_symbol;
+    ")
+        .execute(&mut transaction)
+        .await?;
+
+    let mut routes = sqlx::query("
+        -- calculate the route from each location to each location per good
+        -- limited to routes which will actually turn a profit
+        SELECT
+             llg1.location_symbol AS purchase_location_symbol
+            ,llg1.location_type AS purchase_location_type
+            ,llg2.location_symbol AS sell_location_symbol
+            ,llg2.good_symbol
+            ,SQRT(POW(llg1.x - llg2.x, 2) + POW(llg2.y - llg1.y, 2)) AS distance
+            ,llg1.quantity_available AS purchase_quantity
+            ,llg2.quantity_available AS sell_quantity
+            ,llg1.price_per_unit AS purchase_price_per_unit
+            ,llg2.price_per_unit AS sell_price_per_unit
+            ,llg1.volume_per_unit AS volume_per_unit
+        FROM tmp_latest_location_goods llg1
+        CROSS JOIN tmp_latest_location_goods llg2
+        INNER JOIN daemon_system_info from_dsi
+            ON from_dsi.location_symbol = llg1.location_symbol
+        INNER JOIN daemon_system_info to_dsi
+            ON to_dsi.location_symbol = llg2.location_symbol
+        WHERE from_dsi.location_symbol = $1
+            AND from_dsi.system_symbol = to_dsi.system_symbol
+            AND llg1.good_symbol = llg2.good_symbol
+            AND llg1.location_symbol != llg2.location_symbol
+            AND llg1.price_per_unit < llg2.price_per_unit
+    ")
+        .bind(location_symbol)
+        .map(|row: PgRow| {
+            let distance: f64 = row.get("distance");
+            let location_type: String = row.get("purchase_location_type");
+            let purchase_price_per_unit: i32 = row.get("purchase_price_per_unit");
+            let sell_price_per_unit: i32 = row.get("sell_price_per_unit");
+            let volume_per_unit: i32 = row.get("volume_per_unit");
+
+            let planet_penalty = if location_type == "Planet" { 2.0 } else { 0.0 };
+            let fuel_required: f64 = (distance.round() / 4.0) + planet_penalty + 1.0;
+
+            let cost_volume_distance = f64::from(sell_price_per_unit - purchase_price_per_unit) / f64::from(volume_per_unit) / distance;
+
+            DbRoute {
+                purchase_location_symbol: row.get("purchase_location_symbol"),
+                purchase_location_type: row.get("purchase_location_type"),
+                sell_location_symbol: row.get("sell_location_symbol"),
+                good: Good::from(row.get::<String, &str>("good_symbol")),
+                distance: row.get("distance"),
+                purchase_quantity: row.get("purchase_quantity"),
+                sell_quantity: row.get("sell_quantity"),
+                purchase_price_per_unit,
+                sell_price_per_unit,
+                volume_per_unit,
+                fuel_required,
+                cost_volume_distance,
+            }
+        })
+        .fetch_all(&mut transaction)
+        .await?;
+
+    routes.sort_by(|a, b|
+        b.cost_volume_distance.partial_cmp(&a.cost_volume_distance).unwrap_or(Equal)
+    );
+
+    Ok(routes)
+}
+
+pub async fn get_good_volume(pg_pool: PgPool, good: Good) -> Result<i32, Box<dyn std::error::Error>> {
+    let volume_per_unit: i32 = sqlx::query("
+        SELECT
+            volume_per_unit
+        FROM daemon_market_data dmd
+        WHERE dmd.good_symbol = $1
+        LIMIT 1
+    ")
+        .bind(&good.to_string())
+        .map(|row: PgRow| {
+            row.get("volume_per_unit")
+        })
+        .fetch_one(&pg_pool)
+        .await?;
+
+    Ok(volume_per_unit)
 }

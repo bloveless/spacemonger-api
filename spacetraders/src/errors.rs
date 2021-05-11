@@ -1,5 +1,4 @@
 use std::fmt;
-use std::error;
 
 #[derive(Debug)]
 pub enum GameStatusError {

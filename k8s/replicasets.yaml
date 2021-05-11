@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: spacemongerd
+  namespace: spacemonger
+  labels:
+    app: spacemonger
+    component: spacemongerd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spacemonger
+      component: spacemongerd
+  template:
+    metadata:
+      labels:
+        app: spacemonger
+        component: spacemongerd
+    spec:
+      containers:
+      - name: spacemongerd
+        image: bloveless/spacemongerd:0.1.0-alpha.18
+        command: ["/app/spacemongerd"]
+        envFrom:
+        - secretRef:
+            name: spacemonger
+        env:
+        - name: USERNAME_BASE
+          value: bloveless2
+        - name: POSTGRES_HOST
+          value: 192.168.4.252
+        - name: POSTGRES_PORT
+          value: '5432'
+        - name: POSTGRES_USERNAME
+          value: spacemonger
+        - name: POSTGRES_DATABASE
+          value: spacemonger
+        - name: ENABLE_SCOUTS
+          value: "true"
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: spacemonger-api
+  namespace: spacemonger
+  labels:
+    app: spacemonger
+    component: spacemonger-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spacemonger
+      component: spacemonger-api
+  template:
+    metadata:
+      labels:
+        app: spacemonger
+        component: spacemonger-api
+    spec:
+      containers:
+        - name: spacemonger-api
+          image: bloveless/spacemonger-api:0.1.0-alpha.5
+          command: ["/app/spacemonger-api"]
+          envFrom:
+            - secretRef:
+                name: spacemonger
+          env:
+            - name: USERNAME_BASE
+              value: bloveless
+            - name: POSTGRES_HOST
+              value: 192.168.4.252
+            - name: POSTGRES_PORT
+              value: '5432'
+            - name: POSTGRES_USERNAME
+              value: spacemonger
+            - name: POSTGRES_DATABASE
+              value: spacemonger
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: spacemonger-ui
+  namespace: spacemonger
+  labels:
+    app: spacemonger
+    component: spacemonger-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spacemonger
+      component: spacemonger-ui
+  template:
+    metadata:
+      labels:
+        app: spacemonger
+        component: spacemonger-ui
+    spec:
+      containers:
+        - name: spacemonger-ui
+          image: bloveless/spacemonger-ui:0.1.0-alpha.5
+      restartPolicy: Always

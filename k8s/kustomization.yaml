@@ -6,6 +6,6 @@ commonLabels:
 resources:
 - namespace.yaml
 - secrets.yaml
-- pod.yaml
+- replicasets.yaml
 - service.yaml
 - ingress.yaml
