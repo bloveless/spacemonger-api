@@ -162,9 +162,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     if user.credits > 500_000 {
                         match user.purchase_largest_ship().await {
-                            Ok(_) => println!("Ship purchased"),
-                            Err(_) => println!("Unable to purchase a new ship")
-                        }
+                            Ok(_) => {},
+                            Err(e) => println!("Error occurred while purchasing a ship: {}", e),
+                        };
                     }
                 }
 

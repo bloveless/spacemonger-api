@@ -136,6 +136,7 @@ impl User {
 
         println!("{} -- Valid locations to purchase a ship from are {:?}", self.username, valid_locations.clone());
         println!("{} -- User currently has {} ships", self.username, ships_count);
+        println!("{} -- Ships available for purchase {:?}", self.username, available_ships.clone());
 
         if ships_count > 0 && valid_locations.len() == 0 {
             println!("{} -- No docked ships found to purchase ships with. Will retry later", self.username);
@@ -184,6 +185,7 @@ impl User {
 
         println!("{} -- Valid locations to purchase a ship from are {:?}", self.username, valid_locations.clone());
         println!("{} -- User currently has {} ships", self.username, ships_count);
+        println!("{} -- Ships available for purchase {:?}", self.username, available_ships.clone());
 
         if ships_count > 0 && valid_locations.len() == 0 {
             println!("{} -- No docked ships found to purchase ships with. Will retry later", self.username);
