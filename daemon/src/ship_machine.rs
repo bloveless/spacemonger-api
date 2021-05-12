@@ -4,7 +4,7 @@ use spacetraders::shared::Good;
 use chrono::{DateTime, Utc, Duration};
 use crate::{db, funcs};
 use crate::db::DbRoute;
-use std::cmp::{min, max};
+use std::cmp::max;
 
 #[derive(Debug, Clone)]
 pub enum TickResult {
@@ -205,6 +205,11 @@ impl ShipMachine {
                 let mut new_user_credits = 0;
                 for cargo in ship.cargo {
                     println!("{} -- Selling {} goods {} at {}", self.username, cargo.quantity, cargo.good, ship.location.clone().unwrap());
+                let ships = self.client.get_your_ships().await?;
+                let ship = ships.ships
+                    .into_iter()
+                    .find(|s| s.id == self.ship_id)
+                    .expect("Tried to control a ship which doesn't belong to this user");
                     let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &ship.id, cargo.good, cargo.quantity).await?;
 
                     new_user_credits = sell_order.credits;

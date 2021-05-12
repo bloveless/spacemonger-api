@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
                 if scout_user.ship_machines.is_empty() {
-                    scout_user.purchase_fastest_ship(system.symbol.clone()).await?;
+                    scout_user.purchase_fastest_ship().await?;
                 }
 
                 users.push(scout_user);
@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. if the user doesn't have any ships then buy the largest one that the user can afford that is in the XV system
     if user.ship_machines.is_empty() {
-        user.purchase_largest_ship("XV".to_string()).await?;
+        user.purchase_largest_ship().await?;
     }
 
     users.push(user);
@@ -161,16 +161,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     prev_main_user_credits = user.credits;
 
                     if user.credits > 500_000 {
-                        if user.ship_machines.len() % 2 == 0 {
-                            match user.purchase_largest_ship("XV".to_string()).await {
-                                Ok(_) => println!("Ship purchased"),
-                                Err(_) => println!("Unable to purchase a new ship")
-                            }
-                        } else {
-                            match user.purchase_largest_ship("OE".to_string()).await {
-                                Ok(_) => println!("Ship purchased"),
-                                Err(_) => println!("Unable to purchase a new ship")
-                            }
+                        match user.purchase_largest_ship().await {
+                            Ok(_) => println!("Ship purchased"),
+                            Err(_) => println!("Unable to purchase a new ship")
                         }
                     }
                 }

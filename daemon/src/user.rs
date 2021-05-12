@@ -119,19 +119,32 @@ impl User {
         Ok(())
     }
 
-    pub async fn purchase_fastest_ship(&mut self, system_symbol: String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn purchase_fastest_ship(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let available_ships = self.client.get_ships_for_sale().await?;
         let mut fastest_ship = None;
         let mut fastest_ship_speed = 0;
         let mut fastest_ship_location = "".to_string();
         let mut fastest_ship_price = 0;
 
+        let ships = self.client.get_your_ships().await?;
+        let ships_count = ships.ships.len();
+        let valid_locations: Vec<String> = ships.ships
+            .into_iter()
+            .filter(|s| s.location != None)
+            .map(|s| s.location.unwrap())
+            .collect();
+
+        if ships_count > 0 && valid_locations.len() == 0 {
+            println!("{} -- No docked ships found to purchase ships with. Will retry later", self.username);
+            return Ok(());
+        }
+
         for available_ship in &available_ships.ships {
             for purchase_location in &available_ship.purchase_locations {
                 if available_ship.speed > fastest_ship_speed
                     && available_ship.restricted_goods == None
                     && self.credits > purchase_location.price
-                    && purchase_location.location.contains(system_symbol.as_str())
+                    && (ships_count == 0 || valid_locations.contains(&purchase_location.location))
                 {
                     fastest_ship_speed = available_ship.speed;
                     fastest_ship = Some(available_ship);
@@ -151,19 +164,32 @@ impl User {
         Ok(())
     }
 
-    pub async fn purchase_largest_ship(&mut self, system_symbol: String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn purchase_largest_ship(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let available_ships = self.client.get_ships_for_sale().await?;
         let mut largest_ship = None;
         let mut largest_ship_capacity = 0;
         let mut largest_ship_location = "".to_string();
         let mut largest_ship_price = 0;
 
+        let ships = self.client.get_your_ships().await?;
+        let ships_count = ships.ships.len();
+        let valid_locations: Vec<String> = ships.ships
+            .into_iter()
+            .filter(|s| s.location != None)
+            .map(|s| s.location.unwrap())
+            .collect();
+
+        if ships_count > 0 && valid_locations.len() == 0 {
+            println!("{} -- No docked ships found to purchase ships with. Will retry later", self.username);
+            return Ok(());
+        }
+
         for available_ship in &available_ships.ships {
             for purchase_location in &available_ship.purchase_locations {
                 if available_ship.max_cargo > largest_ship_capacity
                     && available_ship.restricted_goods == None
                     && self.credits > purchase_location.price
-                    && purchase_location.location.contains(system_symbol.as_str())
+                    && (ships_count == 0 || valid_locations.contains(&purchase_location.location))
                 {
                     largest_ship_capacity = available_ship.max_cargo;
                     largest_ship = Some(available_ship);
