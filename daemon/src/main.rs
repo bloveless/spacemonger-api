@@ -160,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{} -- Credits {}", user.username, user.credits);
                     prev_main_user_credits = user.credits;
 
-                    if user.credits > 500_000 {
+                    if user.credits > 750_000 && user.ship_machines.len() < 10 {
                         match user.purchase_largest_ship().await {
                             Ok(_) => {},
                             Err(e) => println!("Error occurred while purchasing a ship: {}", e),
