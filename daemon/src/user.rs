@@ -134,6 +134,9 @@ impl User {
             .map(|s| s.location.unwrap())
             .collect();
 
+        println!("{} -- Valid locations to purchase a ship from are {:?}", self.username, valid_locations.clone());
+        println!("{} -- User currently has {} ships", self.username, ships_count);
+
         if ships_count > 0 && valid_locations.len() == 0 {
             println!("{} -- No docked ships found to purchase ships with. Will retry later", self.username);
             return Ok(());
@@ -158,7 +161,7 @@ impl User {
             println!("Ship {} -- Buying {} for {} at location {}", self.username, ship.ship_type.clone(), fastest_ship_price, fastest_ship_location);
             self.purchase_ship(fastest_ship_location, ship.ship_type.clone()).await?;
         } else {
-            panic!("Unable to find a ship for the user to purchase and the user doesn't currently have any ships");
+            println!("Unable to find a ship for the user to purchase");
         }
 
         Ok(())
@@ -178,6 +181,9 @@ impl User {
             .filter(|s| s.location != None)
             .map(|s| s.location.unwrap())
             .collect();
+
+        println!("{} -- Valid locations to purchase a ship from are {:?}", self.username, valid_locations.clone());
+        println!("{} -- User currently has {} ships", self.username, ships_count);
 
         if ships_count > 0 && valid_locations.len() == 0 {
             println!("{} -- No docked ships found to purchase ships with. Will retry later", self.username);
@@ -203,7 +209,7 @@ impl User {
             println!("Ship {} -- Buying {} for {} at location {}", self.username, ship.ship_type.clone(), largest_ship_price, largest_ship_location);
             self.purchase_ship(largest_ship_location, ship.ship_type.clone()).await?;
         } else {
-            panic!("Unable to find a ship for the user to purchase and the user doesn't currently have any ships");
+            println!("Unable to find a ship for the user to purchase");
         }
 
         Ok(())
