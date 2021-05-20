@@ -6,6 +6,6 @@ commonLabels:
 resources:
 - namespace.yaml
 - secrets.yaml
-- replicasets.yaml
+- deployments.yaml
 - service.yaml
 - ingress.yaml

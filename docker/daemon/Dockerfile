@@ -1,10 +1,28 @@
-FROM rust:1.51-buster as builder
+FROM rust:1.51-buster as planner
 
-RUN cargo install cargo-watch
+WORKDIR app
+
+RUN cargo install cargo-chef --version 0.1.20
+
+COPY . .
+
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM rust:1.51-buster as cacher
+
+WORKDIR app
+RUN cargo install cargo-chef --version 0.1.20
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+FROM rust:1.51-buster as builder
 
 WORKDIR /app/
 
-COPY ./ /app/
+COPY . .
+
+COPY --from=cacher /app/target target
+COPY --from=cacher /usr/local/cargo /usr/local/cargo
 
 RUN cargo build --release --package spacemonger-daemon --bin spacemongerd
 

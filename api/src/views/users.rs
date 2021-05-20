@@ -13,7 +13,7 @@ pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
                 ,u.assignment
                 ,u.system_symbol
                 ,u.location_symbol
-            FROM daemon_users u
+            FROM daemon_user u
             LIMIT 1;
         ")
         .map(|row: PgRow| {

@@ -13,6 +13,7 @@ use crate::ship_machine::{TickResult, ShipAssignment};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
+    env_logger::init();
 
     let username_base = env::var("USERNAME_BASE").unwrap();
     let postgres_host = env::var("POSTGRES_HOST").unwrap();
@@ -21,6 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let postgres_password = env::var("POSTGRES_PASSWORD").unwrap();
     let postgres_database = env::var("POSTGRES_DATABASE").unwrap();
     let enable_scouts = env::var("ENABLE_SCOUTS").unwrap().parse::<bool>().unwrap();
+    let enable_reset = env::var("ENABLE_RESET").unwrap().parse::<bool>().unwrap();
 
     let pg_pool = db::get_db_pool(postgres_host, postgres_port, postgres_username, postgres_password, postgres_database).await?;
 
@@ -34,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if funcs::is_api_in_maintenance_mode(http_client.clone()).await {
         loop {
-            println!("Detected SpaceTraders API in maintenance mode (status code 503). Sleeping for 60 seconds and trying again");
+            log::warn!("Detected SpaceTraders API in maintenance mode (status code 503). Sleeping for 60 seconds and trying again");
             tokio::time::sleep(Duration::from_secs(60)).await;
 
             if !funcs::is_api_in_maintenance_mode(http_client.clone()).await {
@@ -52,10 +54,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         http_client.clone(),
         pg_pool.clone(),
         format!("{}-main", username_base),
-        ShipAssignment::Trader
+        ShipAssignment::Trader,
     ).await;
+
     if user.is_err() {
-        db::reset_db(pg_pool.clone()).await?;
+        if enable_reset {
+            db::reset_db(pg_pool.clone()).await?;
+        }
         // Now that the tables have been moved we will panic so that the pod will restart and the tables will be recreated
         panic!("Unable to connect using the main user. Assuming an API reset. Backing up data and clearing the database");
     }
@@ -70,17 +75,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("## Begin System Messages ----------------------------------------------------------");
+    log::info!("## Begin System Messages ----------------------------------------------------------");
     for system in &system_info.systems {
         for location in &system.locations {
             if let Some(messages) = &location.messages {
                 for message in messages {
-                    println!("Location: {} Message: {}", location.symbol, message)
+                    log::info!("Location: {} Message: {}", location.symbol, message)
                 }
             }
         }
     }
-    println!("## End System Messages ------------------------------------------------------------");
+    log::info!("## End System Messages ------------------------------------------------------------");
 
     let mut users = Vec::new();
     let mut user_handles = Vec::new();
@@ -94,21 +99,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     format!("{}-scout-{}", username_base, location.symbol),
                     ShipAssignment::Scout {
                         system_symbol: system.symbol.clone(),
-                        location_symbol: location.symbol.clone()
+                        location_symbol: location.symbol.clone(),
                     },
                 ).await?;
 
                 // 1. if the user doesn't have enough credits take out a startup loan
-                println!("Scout {} -- credits {}", scout_user.username, scout_user.credits);
+                log::info!("Scout {} -- credits {}", scout_user.username, scout_user.credits);
                 if scout_user.credits == 0 {
-                    println!("Scout {} -- Requesting new {:?} loan", scout_user.username, LoanType::Startup);
+                    log::info!("Scout {} -- Requesting new {:?} loan", scout_user.username, LoanType::Startup);
                     // assume that if the user has 0 credits that the user needs to take out a loan
                     scout_user.request_new_loan(LoanType::Startup).await?;
                 }
 
                 // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
                 if scout_user.ship_machines.is_empty() {
-                    scout_user.purchase_fastest_ship().await?;
+                    scout_user.purchase_fastest_ship(Some(&system.symbol)).await?;
                 }
 
                 users.push(scout_user);
@@ -126,22 +131,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Setup our main user
     // 1. if the user doesn't have enough credits take out a startup loan
     if user.credits == 0 {
-        println!("User {} -- Requesting new {:?} loan", user.username, LoanType::Startup);
+        log::info!("User {} -- Requesting new {:?} loan", user.username, LoanType::Startup);
         // assume that if the user has 0 credits that the user needs to take out a loan
         user.request_new_loan(LoanType::Startup).await?;
     }
 
-    // 2. if the user doesn't have any ships then buy the largest one that the user can afford that is in the XV system
+    // 2. if the user doesn't have any ships then buy the largest one that the user can afford
     if user.ship_machines.is_empty() {
-        user.purchase_largest_ship().await?;
+        user.purchase_largest_ship(None).await?;
     }
 
     users.push(user);
 
     for user in users {
         let mut user = user.clone();
+        let pg_pool = pg_pool.clone();
         user_handles.push(tokio::spawn(async move {
-            let mut prev_main_user_credits = 0;
+            let mut prev_user_credits = 0;
             loop {
                 for machine in &mut user.ship_machines {
                     let tick_result = machine.tick().await;
@@ -156,14 +162,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
 
-                if user.username.contains("-main") && prev_main_user_credits != user.credits {
-                    println!("{} -- Credits {}", user.username, user.credits);
-                    prev_main_user_credits = user.credits;
+                if prev_user_credits != user.credits {
+                    log::info!("{} -- Credits {}", user.username, user.credits);
+                    prev_user_credits = user.credits;
 
-                    if user.credits > 750_000 && user.ship_machines.len() < 10 {
-                        match user.purchase_largest_ship().await {
-                            Ok(_) => {},
-                            Err(e) => println!("Error occurred while purchasing a ship: {}", e),
+                    let user_ships = user.get_my_ships().await.unwrap();
+                    db::persist_user_stats(pg_pool.clone(), &user.id, user.credits, &user_ships.ships)
+                        .await.unwrap();
+
+                    // We want to keep a base amount of 500k but as we get more ships it is more
+                    // costly to fill them with goods so we add 75k per ship to make sure we don't
+                    // go broke
+                    if user.credits > (500_000 + (user.ship_machines.len() as i32 * 75_000)) && user.ship_machines.len() < 100 {
+                        match user.purchase_largest_ship(None).await {
+                            Ok(_) => {}
+                            Err(e) => log::error!("Error occurred while purchasing a ship: {}", e),
                         };
                     }
                 }

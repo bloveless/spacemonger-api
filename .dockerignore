@@ -2,3 +2,5 @@
 target
 *.sqlite
 Makefile
+docker/api/Dockerfile
+docker/daemon/Dockerfile

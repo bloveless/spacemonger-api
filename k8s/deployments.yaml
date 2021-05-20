@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: ReplicaSet
+kind: Deployment
 metadata:
   name: spacemongerd
   namespace: spacemonger
@@ -20,14 +20,14 @@ spec:
     spec:
       containers:
       - name: spacemongerd
-        image: bloveless/spacemongerd:0.1.0-alpha.28
+        image: bloveless/spacemongerd:0.1.0-alpha.46
         command: ["/app/spacemongerd"]
         envFrom:
         - secretRef:
             name: spacemonger
         env:
         - name: USERNAME_BASE
-          value: bloveless2
+          value: bloveless
         - name: POSTGRES_HOST
           value: 192.168.4.252
         - name: POSTGRES_PORT
@@ -38,10 +38,14 @@ spec:
           value: spacemonger
         - name: ENABLE_SCOUTS
           value: "true"
+        - name: ENABLE_RESET
+          value: "true"
+        - name: RUST_LOG
+          value: spacemongerd=debug,spacetraders=info
       restartPolicy: Always
 ---
 apiVersion: apps/v1
-kind: ReplicaSet
+kind: Deployment
 metadata:
   name: spacemonger-api
   namespace: spacemonger
@@ -62,7 +66,7 @@ spec:
     spec:
       containers:
         - name: spacemonger-api
-          image: bloveless/spacemonger-api:0.1.0-alpha.5
+          image: bloveless/spacemonger-api:0.1.0-alpha.6
           command: ["/app/spacemonger-api"]
           envFrom:
             - secretRef:
@@ -81,7 +85,7 @@ spec:
       restartPolicy: Always
 ---
 apiVersion: apps/v1
-kind: ReplicaSet
+kind: Deployment
 metadata:
   name: spacemonger-ui
   namespace: spacemonger

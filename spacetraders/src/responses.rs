@@ -19,10 +19,15 @@ pub struct UserInfoData {
     pub username: String,
     /// The credits available to the user
     pub credits: i32,
-    /// The users ships
-    pub ships: Vec<shared::Ship>,
-    /// The users loans
-    pub loans: Vec<shared::Loan>,
+    /// The number of ships owned by the user
+    #[serde(rename = "shipCount")]
+    pub ship_count: i32,
+    /// The number of structures owned by the user
+    #[serde(rename = "structureCount")]
+    pub structure_count: i32,
+    /// The date the user joined
+    #[serde(rename = "joinedAt")]
+    pub joined_at: DateTime<Utc>,
 }
 
 /// A representation of a user info request
@@ -137,6 +142,20 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
+/// A representation of user info
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct ClaimUsernameUser {
+    /// The users name
+    pub username: String,
+    /// The credits available to the user
+    pub credits: i32,
+    /// The users ships
+    pub ships: Vec<shared::Ship>,
+    /// The users loans
+    pub loans: Vec<shared::Loan>,
+}
+
 /// The representation of a claim username response
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
@@ -144,15 +163,23 @@ pub struct ClaimUsername {
     /// The token of the claimed username
     pub token: String,
     /// The user info of the claimed username
-    pub user: UserInfoData,
+    pub user: ClaimUsernameUser,
 }
 
-/// The representation of your ships response
+/// The representation of the current user ships response
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
-pub struct YourShips {
+pub struct MyShips {
     /// The list of ships attached to the current user account
     pub ships: Vec<shared::Ship>,
+}
+
+/// The representation of a specific current user ship response
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct MyShip {
+    /// The list of ships attached to the current user account
+    pub ship: shared::Ship,
 }
 
 /// The representation of a location response
@@ -174,12 +201,12 @@ pub struct LoanInfo {
     pub loans: Vec<shared::Loan>,
 }
 
-/// The representation of the planet marketplace return
+/// The representation of the location marketplace return
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct LocationMarketplace {
     /// The marketplace data for the requested location
-    pub location: shared::LocationMarketplaceData,
+    pub marketplace: Vec<shared::MarketplaceData>,
 }
 
 /// The representation of a purchase ship response

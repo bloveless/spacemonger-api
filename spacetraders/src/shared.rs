@@ -162,7 +162,7 @@ impl fmt::Display for LocationType {
 }
 
 /// A representation of a users ship
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct Ship {
     /// The ships id
@@ -194,10 +194,13 @@ pub struct Ship {
     pub x: Option<i32>,
     /// The ships current Y coordinate
     pub y: Option<i32>,
+    #[serde(rename = "flightPlanId")]
+    /// The ships current flight plan
+    pub flight_plan_id: Option<String>,
 }
 
 /// A representation of cargo within a ship
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct Cargo {
     /// The good in the cargo
@@ -210,7 +213,7 @@ pub struct Cargo {
 }
 
 /// A representation of a purchase order
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct Order {
     /// The good that was purchased
@@ -225,7 +228,7 @@ pub struct Order {
 }
 
 /// A representation of a loan
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct Loan {
     /// The id of the loan
@@ -243,7 +246,7 @@ pub struct Loan {
 }
 
 /// A representation of a purchase location for a ship for sale
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct PurchaseLocation {
     /// The system of the ship for sale
@@ -255,7 +258,7 @@ pub struct PurchaseLocation {
 }
 
 /// A representation of a ship for sales
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct ShipForSale {
     /// The type of the ship
@@ -283,7 +286,7 @@ pub struct ShipForSale {
 }
 
 /// A representation of a location in a system
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct Location {
     /// The system symbol for this location
@@ -300,7 +303,7 @@ pub struct Location {
 }
 
 /// A representation of an error message
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct ErrorMessageData {
     /// The API sent error code
@@ -310,7 +313,7 @@ pub struct ErrorMessageData {
 }
 
 /// A representation of a single flight plan
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct FlightPlanData {
     /// The id of the flight plan
@@ -347,7 +350,7 @@ pub struct FlightPlanData {
 }
 
 /// The structures that exist at a location
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Structures {
     /// The id of the structure
     pub id: String,
@@ -359,7 +362,7 @@ pub struct Structures {
 }
 
 /// A representation of a location within a system
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct SystemsInfoLocation {
     /// The system symbol of this location
@@ -388,7 +391,7 @@ pub struct SystemsInfoLocation {
 }
 
 /// The representation of a system
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct SystemsInfoData {
     /// The system symbol
@@ -400,7 +403,7 @@ pub struct SystemsInfoData {
 }
 
 /// The representation of a single good within a marketplace
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct MarketplaceData {
     /// The type of good for this marketplace data
@@ -425,7 +428,7 @@ pub struct MarketplaceData {
 }
 
 /// Available structure types
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub enum StructureType {
     /// Fuel Refinery
@@ -446,59 +449,15 @@ pub enum StructureType {
 }
 
 /// A representation of structure found in marketplace data
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct StructureOwnedBy {
     /// The user who owns the structure
     pub username: String,
 }
 
-/// A representation of structure found in marketplace data
-#[derive(Deserialize, Debug, Clone)]
-#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
-pub struct LocationMarketplaceStructure {
-    /// Id of this structure
-    pub id: String,
-    /// Type of this structure
-    #[serde(rename = "type")]
-    pub structure_type: StructureType,
-    /// The location of the structure
-    pub location: String,
-    /// The ownership information about the structure
-    #[serde(rename = "ownedBy")]
-    pub owned_by: Option<StructureOwnedBy>,
-}
-
-/// A representation of marketplace data for a location
-#[derive(Deserialize, Debug, Clone)]
-#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
-pub struct LocationMarketplaceData {
-    /// The friendly name of the location
-    pub name: String,
-    /// The system symbol of the location
-    pub symbol: String,
-    /// The location type
-    #[serde(rename = "type")]
-    pub location_type: String,
-    /// X coordinate of the location
-    pub x: i32,
-    /// Y coordinate of the location
-    pub y: i32,
-    /// The marketplace data for the location
-    pub marketplace: Vec<MarketplaceData>,
-    /// The anomaly at a specific location
-    pub anomaly: Option<String>,
-    /// Whether or not the location allows constructing new structures
-    #[serde(rename = "allowsConstruction")]
-    pub allows_construction: bool,
-    /// Any structures present at this location
-    pub structures: Vec<LocationMarketplaceStructure>,
-    /// Any messages
-    pub messages: Option<Vec<String>>,
-}
-
 /// An error response returned from the API
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct ErrorMessage {
     /// The data about the error

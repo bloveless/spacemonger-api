@@ -1,7 +1,7 @@
 use spacetraders::client::{self, HttpClient, Client};
-use spacetraders::errors::GameStatusError;
+use spacetraders::errors::SpaceTradersClientError;
 use sqlx::PgPool;
-use spacetraders::responses;
+use spacetraders::{responses, shared};
 use crate::db;
 use spacetraders::shared::Good;
 use crate::db::DbRoute;
@@ -12,7 +12,7 @@ pub async fn is_api_in_maintenance_mode(http_client: HttpClient) -> bool {
     if game_status.is_err() {
         let game_status_error = game_status.err().unwrap();
 
-        return matches!(game_status_error, GameStatusError::ServiceUnavailable)
+        return matches!(game_status_error, SpaceTradersClientError::ServiceUnavailable)
     }
 
     false
@@ -61,12 +61,12 @@ pub async fn get_fuel_required_for_trip(pg_pool: PgPool, origin: &str, destinati
     Ok(fuel_required + ship_fuel_penalty)
 }
 
-pub async fn get_routes_for_ship(pg_pool: PgPool, ship_origin: &str) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
+pub async fn get_routes_for_ship(pg_pool: PgPool, ship: &shared::Ship) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
     // TODO: Getting the best route only from the location that the ship currently is in locks
     //       the ship into trade loops. It might be better to search the entire system for the
     //       best route and then find the best trade to that location before beginning a trade
     //       route. That way we move around the system a little more
-    match db::get_routes_from_location(pg_pool.clone(), &ship_origin).await {
+    match db::get_routes_from_location(pg_pool.clone(), ship).await {
         Ok(routes) => return Ok(routes),
         Err(e) => panic!("Unable to get routes for ship {:?}", e),
     };

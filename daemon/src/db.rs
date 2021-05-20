@@ -1,3 +1,4 @@
+use serde::Serialize;
 use spacetraders::{shared, responses};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Row, PgPool};
@@ -5,6 +6,8 @@ use chrono::{Utc, DateTime};
 use std::cmp::Ordering::Equal;
 use spacetraders::shared::Good;
 use crate::ship_machine::ShipAssignment;
+use std::collections::HashMap;
+use spacetraders::errors::SpaceTradersClientError;
 
 #[derive(Debug, Clone)]
 pub struct Ship {
@@ -48,7 +51,9 @@ pub struct DbRoute {
     pub sell_price_per_unit: i32,
     pub volume_per_unit: i32,
     pub fuel_required: f64,
+    pub flight_time: f64,
     pub cost_volume_distance: f64,
+    pub profit_speed_volume_distance: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -77,19 +82,35 @@ pub async fn run_migrations(pg_pool: PgPool) -> Result<(), Box<dyn std::error::E
 
 pub async fn reset_db(pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
     let now = Utc::now();
-    let now = now.format("%Y%m%d").to_string();
+    let now = now.format("z%Y%m%d").to_string();
 
-    sqlx::query(&format!("ALTER TABLE daemon_flight_plans RENAME TO z{}_daemon_flight_plans", now))
-        .execute(&pg_pool).await?;
-    sqlx::query(&format!("ALTER TABLE daemon_market_data RENAME TO z{}_daemon_market_data", now))
-        .execute(&pg_pool).await?;
-    sqlx::query(&format!("ALTER TABLE daemon_system_info RENAME TO z{}_daemon_system_info", now))
-        .execute(&pg_pool).await?;
-    sqlx::query(&format!("ALTER TABLE daemon_users RENAME TO z{}_daemon_users", now))
-        .execute(&pg_pool).await?;
+    #[derive(Debug)]
+    struct DbTables {
+        schema: String,
+        name: String,
+    }
 
-    // Drop the sqlx migrations table so all the tables will be created again
-    sqlx::query("DROP TABLE _sqlx_migrations;").execute(&pg_pool).await?;
+    let results = sqlx::query("
+        SELECT *
+        FROM pg_catalog.pg_tables
+        WHERE schemaname = 'public' AND tableowner = 'spacemonger';
+    ")
+        .map(|row: PgRow| {
+            DbTables {
+                schema: row.get("schemaname"),
+                name: row.get("tablename"),
+            }
+        })
+        .fetch_all(&pg_pool)
+        .await?;
+
+    sqlx::query(&format!("CREATE SCHEMA {}", now)).execute(&pg_pool).await?;
+
+    for table in results {
+        sqlx::query(&format!("ALTER TABLE {}.{} SET SCHEMA {}", table.schema, table.name, now))
+            .execute(&pg_pool)
+            .await?;
+    }
 
     Ok(())
 }
@@ -97,7 +118,7 @@ pub async fn reset_db(pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>>
 pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<DbUser>, Box<dyn std::error::Error>> {
     Ok(
         sqlx::query("
-            SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM daemon_users
+            SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM daemon_user
             WHERE username = $1
             LIMIT 1;
         ")
@@ -122,11 +143,11 @@ pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assi
     let assignment_system_symbol;
     let assignment_location_symbol;
     match assignment {
-        ShipAssignment::Scout { system_symbol, location_symbol} => {
+        ShipAssignment::Scout { system_symbol, location_symbol } => {
             assignment_type = "scout";
             assignment_system_symbol = Some(system_symbol);
             assignment_location_symbol = Some(location_symbol);
-        },
+        }
         ShipAssignment::Trader => {
             assignment_type = "trader";
             assignment_system_symbol = None;
@@ -136,7 +157,7 @@ pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assi
 
     Ok(
         sqlx::query("
-            INSERT INTO daemon_users (username, token, assignment, system_symbol, location_symbol)
+            INSERT INTO daemon_user (username, token, assignment, system_symbol, location_symbol)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id::text, username, token, assignment, system_symbol, location_symbol;
         ")
@@ -186,9 +207,28 @@ pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsIn
     Ok(())
 }
 
+pub async fn get_system_locations_from_location(pg_pool: PgPool, location_symbol: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    Ok(
+        sqlx::query("
+            SELECT
+                dsi.location_symbol
+            FROM daemon_system_info dsi
+            INNER JOIN daemon_system_info dsi2
+                ON dsi.system_symbol = dsi2.system_symbol
+            WHERE dsi2.location_symbol = $1;
+        ")
+            .bind(location_symbol)
+            .map(|row: PgRow| {
+                row.get("location_symbol")
+            })
+            .fetch_all(&pg_pool)
+            .await?
+    )
+}
+
 pub async fn persist_flight_plan(pg_pool: PgPool, user_id: &str, ship_id: &str, flight_plan: &responses::FlightPlan) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
-        INSERT INTO daemon_flight_plans (
+        INSERT INTO daemon_flight_plan (
              id
             ,user_id
             ,ship_id
@@ -292,7 +332,7 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship_id: &str) -> Result<Op
                 ,distance
                 ,arrives_at
                 ,user_id
-            FROM daemon_flight_plans
+            FROM daemon_flight_plan
             WHERE ship_id = $1
                 AND arrives_at > $2
         ")
@@ -336,7 +376,7 @@ pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketp
     Ok(())
 }
 
-pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
+pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
     let mut transaction = pg_pool.begin().await.unwrap();
 
     sqlx::query("DROP TABLE IF EXISTS tmp_latest_location_goods;")
@@ -426,7 +466,7 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str) ->
             AND llg1.good_symbol = llg2.good_symbol
             AND llg1.location_symbol != llg2.location_symbol
     ")
-        .bind(location_symbol)
+        .bind(ship.location.clone().unwrap())
         .map(|row: PgRow| {
             let distance: f64 = row.get("distance");
             let location_type: String = row.get("purchase_location_type");
@@ -435,9 +475,13 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str) ->
             let volume_per_unit: i32 = row.get("volume_per_unit");
 
             let planet_penalty = if location_type == "Planet" { 2.0 } else { 0.0 };
-            let fuel_required: f64 = (distance.round() / 4.0) + planet_penalty + 1.0;
+            let fuel_required: f64 = (distance.round() / 4.0).round() + planet_penalty + 1.0;
 
-            let cost_volume_distance = f64::from(sell_price_per_unit - purchase_price_per_unit) / f64::from(volume_per_unit) / distance;
+            let flight_time = (distance * (2.0 / f64::from(ship.speed)).round()) + 60.0;
+
+            let profit = f64::from(sell_price_per_unit - purchase_price_per_unit);
+            let cost_volume_distance = profit / f64::from(volume_per_unit) / distance;
+            let profit_speed_volume_distance = (profit * f64::from(ship.speed)) / (f64::from(volume_per_unit) * distance);
 
             DbRoute {
                 purchase_location_symbol: row.get("purchase_location_symbol"),
@@ -451,14 +495,16 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str) ->
                 sell_price_per_unit,
                 volume_per_unit,
                 fuel_required,
+                flight_time,
                 cost_volume_distance,
+                profit_speed_volume_distance,
             }
         })
         .fetch_all(&mut transaction)
         .await?;
 
     routes.sort_by(|a, b|
-        b.cost_volume_distance.partial_cmp(&a.cost_volume_distance).unwrap_or(Equal)
+        b.profit_speed_volume_distance.partial_cmp(&a.profit_speed_volume_distance).unwrap_or(Equal)
     );
 
     Ok(routes)
@@ -480,4 +526,67 @@ pub async fn get_good_volume(pg_pool: PgPool, good: Good) -> Result<i32, Box<dyn
         .await?;
 
     Ok(volume_per_unit)
+}
+
+pub async fn persist_user_stats(pg_pool: PgPool, user_id: &str, credits: i32, ships: &Vec<shared::Ship>) -> Result<(), Box<dyn std::error::Error>> {
+    sqlx::query("
+        INSERT INTO daemon_user_stats (user_id, credits, ship_count, ships) VALUES ($1::uuid, $2, $3, $4::json);
+    ")
+        .bind(user_id)
+        .bind(credits)
+        .bind(ships.len() as i32)
+        .bind(serde_json::to_string(&ships).unwrap())
+        .execute(&pg_pool)
+        .await?;
+
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct DbRequest<'a> {
+    method: &'a str,
+    url: &'a str,
+    body: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct DbResponse<'a> {
+    status_code: Option<u16>,
+    headers: Option<&'a HashMap<String, String>>,
+    body: Option<&'a str>,
+}
+
+pub async fn persist_request_response(
+    pg_pool: PgPool,
+    method: &str, url: &str, request_body: Option<&str>,
+    response_status_code: Option<u16>, response_headers: Option<&HashMap<String, String>>, response_body: Option<&str>,
+    error: Option<&SpaceTradersClientError>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let db_request = DbRequest {
+        method,
+        url,
+        body: request_body,
+    };
+
+    let db_response = DbResponse {
+        status_code: response_status_code,
+        headers: response_headers,
+        body: response_body,
+    };
+
+    let mut db_error = None;
+    if let Some(error) = error {
+        db_error = Some(format!("Error: {}", error));
+    }
+
+    sqlx::query("
+        INSERT INTO http_log (request, response, error) VALUES ($1, $2, $3);
+    ")
+        .bind(serde_json::to_string(&db_request).unwrap())
+        .bind(serde_json::to_string(&db_response).unwrap())
+        .bind(db_error)
+        .execute(&pg_pool)
+        .await?;
+
+    Ok(())
 }
