@@ -17,6 +17,8 @@ pub struct User {
     pg_pool: PgPool,
     assignment: ShipAssignment,
     pub ship_machines: Vec<ShipMachine>,
+    pub loans: Vec<shared::Loan>,
+    pub outstanding_loans: usize,
     pub credits: i32,
 }
 
@@ -29,6 +31,7 @@ impl User {
             let client = Client::new(http_client, user.username, user.token.clone());
             let info = client.get_my_info().await?;
             let ships = client.get_my_ships().await?;
+            let loans = client.get_my_loans().await?;
 
             log::info!("User credits {}", info.user.credits);
 
@@ -41,6 +44,8 @@ impl User {
                 assignment: assignment.clone(),
                 ship_machines: Vec::new(),
                 credits: info.user.credits,
+                loans: loans.loans.clone(),
+                outstanding_loans: loans.loans.into_iter().filter(|f| { !f.status.contains("PAID") }).count()
             };
 
             user.add_ship_machines_from_user_info(&ships, &assignment);
@@ -64,6 +69,7 @@ impl User {
             let client = Client::new(http_client, username.clone(), claimed_user.token.clone());
             let info = client.get_my_info().await?;
             let ships = client.get_my_ships().await?;
+            let loans = client.get_my_loans().await?;
 
             log::info!("User credits {}", info.user.credits);
 
@@ -76,6 +82,8 @@ impl User {
                 assignment: assignment.clone(),
                 ship_machines: Vec::new(),
                 credits: info.user.credits,
+                loans: loans.loans.clone(),
+                outstanding_loans: loans.loans.into_iter().filter(|f| { !f.status.contains("PAID") }).count()
             };
 
             user.add_ship_machines_from_user_info(&ships, &assignment);
@@ -237,5 +245,9 @@ impl User {
 
     pub async fn get_my_ships(&self) -> Result<responses::MyShips, SpaceTradersClientError> {
         self.client.get_my_ships().await
+    }
+
+    pub async fn pay_off_loan(&self, loan_id: &str) -> Result<responses::PayLoanResponse, SpaceTradersClientError> {
+        self.client.pay_off_loan(loan_id).await
     }
 }

@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: spacemongerd
-        image: bloveless/spacemongerd:0.1.0-alpha.46
+        image: bloveless/spacemongerd:0.1.0-alpha.47
         command: ["/app/spacemongerd"]
         envFrom:
         - secretRef:
@@ -66,7 +66,7 @@ spec:
     spec:
       containers:
         - name: spacemonger-api
-          image: bloveless/spacemonger-api:0.1.0-alpha.6
+          image: bloveless/spacemonger-api:0.1.0-alpha.8
           command: ["/app/spacemonger-api"]
           envFrom:
             - secretRef:
@@ -106,5 +106,5 @@ spec:
     spec:
       containers:
         - name: spacemonger-ui
-          image: bloveless/spacemonger-ui:0.1.0-alpha.5
+          image: bloveless/spacemonger-ui:0.1.0-alpha.8
       restartPolicy: Always

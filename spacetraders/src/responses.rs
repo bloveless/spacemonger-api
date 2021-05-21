@@ -2,6 +2,7 @@
 use crate::shared;
 use serde::Deserialize;
 use chrono::{DateTime, Utc};
+use crate::shared::Loan;
 
 /// A representation of the game status
 #[derive(Deserialize, Debug, Clone)]
@@ -73,6 +74,28 @@ pub struct RequestLoan {
     pub credits: i32,
     /// The loan granted information
     pub loan: shared::Loan,
+}
+
+/// The user associated with a pay loan response
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct PayLoanUser {
+    /// The users username
+    pub username: String,
+    /// The most up to date users credits
+    pub credits: i32,
+    /// The users ships
+    pub ships: Vec<shared::Ship>,
+    /// The users loans
+    pub loans: Vec<Loan>,
+}
+
+/// A representation of a pay loan response
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct PayLoanResponse {
+    /// The newest user info after paying the loan
+    pub user: PayLoanUser,
 }
 
 /// The representation of a ships for sale request

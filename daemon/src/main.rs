@@ -176,8 +176,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if user.credits > (500_000 + (user.ship_machines.len() as i32 * 75_000)) && user.ship_machines.len() < 100 {
                         match user.purchase_largest_ship(None).await {
                             Ok(_) => {}
-                            Err(e) => log::error!("Error occurred while purchasing a ship: {}", e),
+                            Err(e) => log::error!("{} -- Error occurred while purchasing a ship. Error: {}", user.username, e)
                         };
+                    }
+
+                    // After we are millionaires we should probably pay off our loans
+                    if user.credits > 1_000_000 && user.outstanding_loans > 0 {
+                        let loan = user.loans.first().unwrap();
+                        match user.pay_off_loan(&loan.id).await {
+                            Ok(pay_loan_response) => {
+                                log::info!("{} -- User paid off loan id {}", user.username, loan.id);
+                                user.loans = pay_loan_response.user.loans.clone();
+                                user.outstanding_loans = pay_loan_response.user.loans.into_iter().filter(|l| { !l.status.contains("PAID") }).count();
+                                user.credits = pay_loan_response.user.credits;
+                            }
+                            Err(e) => log::error!("{} -- Unable to pay off loan id {}. Error: {}", user.username, loan.id, e)
+                        }
                     }
                 }
 

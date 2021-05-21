@@ -19,10 +19,27 @@ pub struct MarketData {
 pub struct User {
     pub id: String,
     pub username: String,
-    pub token: String,
     pub assignment: String,
-    pub system_symbol: String,
-    pub location_symbol: String,
+    pub system_symbol: Option<String>,
+    pub location_symbol: Option<String>,
+    pub credits: i32,
+    pub ship_count: i32,
+    pub stats_updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UserStats {
+    pub user_id: String,
+    pub credits: i32,
+    pub ship_count: i32,
+    pub ships: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UserStatsResponse {
+    pub username: String,
+    pub stats: Vec<UserStats>,
 }
 
 #[derive(Serialize, Deserialize)]

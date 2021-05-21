@@ -354,17 +354,17 @@ impl Client {
     /// # Arguments
     ///
     /// * `loan_id` - A string containing the loan_id of the loan to pay off
-    pub async fn pay_off_loan(&self, loan_id: String) -> Result<responses::UserInfo, SpaceTradersClientError> {
+    pub async fn pay_off_loan(&self, loan_id: &str) -> Result<responses::PayLoanResponse, SpaceTradersClientError> {
         let http_client = self.http_client.lock().await;
         let response = http_client.execute_request(
             "PUT",
             &format!("https://api.spacetraders.io/my/loans/{}", loan_id),
-            None,
+            Some("{\"message\":\"this body doesn't actually matter\"}"),
             Some(&self.token),
         )
             .await?;
 
-        parse_response::<responses::UserInfo>(&response.response_text)
+        parse_response::<responses::PayLoanResponse>(&response.response_text)
     }
 
     /// Request a new loan

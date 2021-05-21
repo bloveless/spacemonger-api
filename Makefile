@@ -1,8 +1,8 @@
 publish-daemon:
-	docker buildx build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:0.1.0-alpha.46 --push .
+	docker buildx build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:0.1.0-alpha.47 --push .
 
 publish-api:
-	docker buildx build --platform linux/arm64 -f docker/api/Dockerfile -t bloveless/spacemonger-api:0.1.0-alpha.6 --push .
+	docker buildx build --platform linux/arm64 -f docker/api/Dockerfile -t bloveless/spacemonger-api:0.1.0-alpha.8 --push .
 
 migration-daemon:
 	cd daemon; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate add $(name)
