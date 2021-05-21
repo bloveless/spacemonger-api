@@ -1,4 +1,4 @@
-FROM rust:1.51-buster as planner
+FROM rust:1.52-buster as planner
 
 WORKDIR app
 
@@ -8,14 +8,14 @@ COPY . .
 
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM rust:1.51-buster as cacher
+FROM rust:1.52-buster as cacher
 
 WORKDIR app
 RUN cargo install cargo-chef --version 0.1.20
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
-FROM rust:1.51-buster as builder
+FROM rust:1.52-buster as builder
 
 WORKDIR /app/
 

@@ -122,8 +122,8 @@ impl SpaceTradersClient {
                     // Check if the response was a throttle exception (status 429 means we have been rate limited)
                     if response_status == 429 {
                         let retry_after: f64 = response_headers
-                            .get("retry-after").unwrap()
-                            .parse().unwrap();
+                            .get("retry-after").unwrap_or(&"1.0".to_string())
+                            .parse().unwrap_or(1.0);
 
                         // If it was a throttle then wait based on the retry-after response headers
                         log::warn!("Rate limited... waiting for {} seconds before trying again. Request: \"{} {}\"", retry_after, request.method(), request.url());
