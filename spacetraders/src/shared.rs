@@ -21,77 +21,113 @@ pub enum LoanType {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub enum Good {
-    /// Metals
-    #[serde(rename = "METALS")]
-    Metals,
-    /// Rare metals
-    #[serde(rename = "RARE_METALS")]
-    RareMetals,
-    /// Chemicals
-    #[serde(rename = "CHEMICALS")]
-    Chemicals,
     /// Fuel
     #[serde(rename = "FUEL")]
     Fuel,
-    /// Food
-    #[serde(rename = "FOOD")]
-    Food,
+    /// Chemicals
+    #[serde(rename = "CHEMICALS")]
+    Chemicals,
+    /// Metals
+    #[serde(rename = "METALS")]
+    Metals,
     /// Drones
     #[serde(rename = "DRONES")]
     Drones,
-    /// Textiles
-    #[serde(rename = "TEXTILES")]
-    Textiles,
+    /// Food
+    #[serde(rename = "FOOD")]
+    Food,
     /// Consumer goods
     #[serde(rename = "CONSUMER_GOODS")]
     ConsumerGoods,
-    /// Machiner
+    /// Explosives
+    #[serde(rename = "EXPLOSIVES")]
+    Explosives,
+    /// Narcotics
+    #[serde(rename = "NARCOTICS")]
+    Narcotics,
+    /// Textiles
+    #[serde(rename = "TEXTILES")]
+    Textiles,
+    /// Electronics
+    #[serde(rename = "ELECTRONICS")]
+    Electronics,
+    /// Machinery
     #[serde(rename = "MACHINERY")]
     Machinery,
     /// Construction materials
     #[serde(rename = "CONSTRUCTION_MATERIALS")]
     ConstructionMaterials,
-    /// Electronics
-    #[serde(rename = "ELECTRONICS")]
-    Electronics,
-    /// Research
-    #[serde(rename = "RESEARCH")]
-    Research,
-    /// Ship parts
-    #[serde(rename = "SHIP_PARTS")]
-    ShipParts,
     /// Ship plating
     #[serde(rename = "SHIP_PLATING")]
     ShipPlating,
-    /// Fusion Reactors
-    #[serde(rename = "FUSION_REACTORS")]
-    FusionReactors,
-    /// Exotic Plasma
-    #[serde(rename = "EXOTIC_PLASMA")]
-    ExoticPlasma,
-    /// Unstable Compounds
-    #[serde(rename = "UNSTABLE_COMPOUNDS")]
-    UnstableCompounds,
+    /// Rare metals
+    #[serde(rename = "RARE_METALS")]
+    RareMetals,
     /// Protein Synthesizers
     #[serde(rename = "PROTEIN_SYNTHESIZERS")]
     ProteinSynthesizers,
-    /// Biometric Firearms
-    #[serde(rename = "BIOMETRIC_FIREARMS")]
-    BiometricFirearms,
-    /// Explosives
-    #[serde(rename = "EXPLOSIVES")]
-    Explosives,
-    /// Nanobots
-    #[serde(rename = "NANOBOTS")]
-    Nanobots,
+    /// Research
+    #[serde(rename = "RESEARCH")]
+    Research,
     /// Precision Instruments
     #[serde(rename = "PRECISION_INSTRUMENTS")]
     PrecisionInstruments,
-    /// Narcotics
-    #[serde(rename = "NARCOTICS")]
-    Narcotics,
+    /// Nanobots
+    #[serde(rename = "NANOBOTS")]
+    Nanobots,
+    /// Biometric Firearms
+    #[serde(rename = "BIOMETRIC_FIREARMS")]
+    BiometricFirearms,
+    /// Ship parts
+    #[serde(rename = "SHIP_PARTS")]
+    ShipParts,
+    /// Exotic Plasma
+    #[serde(rename = "EXOTIC_PLASMA")]
+    ExoticPlasma,
+    /// Fusion Reactors
+    #[serde(rename = "FUSION_REACTORS")]
+    FusionReactors,
+    /// Zuco Crystals
+    #[serde(rename = "ZUCO_CRYSTALS")]
+    ZucoCrystals,
+    /// Unstable Compounds
+    #[serde(rename = "UNSTABLE_COMPOUNDS")]
+    UnstableCompounds,
     /// Unknown is used when a string can't be converted to a known good
     Unknown
+}
+
+impl Good {
+    /// Get the volume consumed by a good
+    pub fn get_volume(&self) -> i32 {
+        match *self {
+            Good::Fuel => 1,
+            Good::Chemicals => 1,
+            Good::Metals => 1,
+            Good::Drones => 1,
+            Good::Food => 1,
+            Good::ConsumerGoods => 1,
+            Good::Explosives => 1,
+            Good::Narcotics => 1,
+            Good::Textiles => 1,
+            Good::Electronics => 1,
+            Good::Machinery => 2,
+            Good::ConstructionMaterials => 1,
+            Good::ShipPlating => 2,
+            Good::RareMetals => 1,
+            Good::ProteinSynthesizers => 1,
+            Good::Research => 1,
+            Good::PrecisionInstruments => 1,
+            Good::Nanobots => 1,
+            Good::BiometricFirearms => 1,
+            Good::ShipParts => 4,
+            Good::ExoticPlasma => 4,
+            Good::FusionReactors => 6,
+            Good::ZucoCrystals => 1,
+            Good::UnstableCompounds => 3,
+            Good::Unknown => 1,
+        }
+    }
 }
 
 impl From<String> for Good {

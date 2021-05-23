@@ -290,15 +290,12 @@ impl ShipMachine {
 
                 let room_available_for_trading = ship.ship.space_available - fuel_required;
 
-                let volume_per_unit = (db::get_good_volume(self.pg_pool.clone(), route.good).await)
-                    .unwrap_or(1);
-
                 log::info!(
                     "{} -- Purchasing {} {} for trading (volume per unit {}). Purchase price at {} is {}. Sell price at {} is {}",
                     self.username,
-                    room_available_for_trading / volume_per_unit,
+                    room_available_for_trading / route.good.get_volume(),
                     route.good,
-                    volume_per_unit,
+                    route.good.get_volume(),
                     route.purchase_location_symbol,
                     route.purchase_price_per_unit,
                     route.sell_location_symbol,
@@ -310,7 +307,7 @@ impl ShipMachine {
                     self.pg_pool.clone(),
                     &self.ship_id,
                     route.good,
-                    room_available_for_trading / volume_per_unit,
+                    room_available_for_trading / route.good.get_volume(),
                 ).await {
                     Ok(purchase_order) => {
                         self.destination = route.sell_location_symbol;

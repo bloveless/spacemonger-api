@@ -510,24 +510,6 @@ pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> R
     Ok(routes)
 }
 
-pub async fn get_good_volume(pg_pool: PgPool, good: Good) -> Result<i32, Box<dyn std::error::Error>> {
-    let volume_per_unit: i32 = sqlx::query("
-        SELECT
-            volume_per_unit
-        FROM daemon_market_data dmd
-        WHERE dmd.good_symbol = $1
-        LIMIT 1
-    ")
-        .bind(&good.to_string())
-        .map(|row: PgRow| {
-            row.get("volume_per_unit")
-        })
-        .fetch_one(&pg_pool)
-        .await?;
-
-    Ok(volume_per_unit)
-}
-
 pub async fn persist_user_stats(pg_pool: PgPool, user_id: &str, credits: i32, ships: &Vec<shared::Ship>) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query("
         INSERT INTO daemon_user_stats (user_id, credits, ship_count, ships) VALUES ($1::uuid, $2, $3, $4::json);
