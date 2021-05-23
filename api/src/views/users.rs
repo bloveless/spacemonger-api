@@ -11,6 +11,7 @@ pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
                      user_id
                     ,credits
                     ,ship_count
+                    ,ships
                     ,created_at
                     ,ROW_NUMBER() OVER (ORDER BY created_at DESC) as rank
                 FROM daemon_user_stats
@@ -23,6 +24,7 @@ pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
                 ,u.location_symbol
                 ,us.credits
                 ,us.ship_count
+                ,us.ships::text
                 ,us.created_at as stats_updated_at
             FROM daemon_user u
             INNER JOIN user_stats us
@@ -38,6 +40,7 @@ pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
                 location_symbol: row.get("location_symbol"),
                 credits: row.get("credits"),
                 ship_count: row.get("ship_count"),
+                ships: row.get("ships"),
                 stats_updated_at: row.get("stats_updated_at"),
             }
         })
@@ -75,7 +78,6 @@ pub async fn user_stats(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
              user_id::text
             ,credits
             ,ship_count
-            ,ships::text
             ,created_at
         FROM daemon_user_stats dus
         WHERE dus.user_id = $1::uuid
@@ -87,7 +89,6 @@ pub async fn user_stats(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
                 user_id: row.get("user_id"),
                 credits: row.get("credits"),
                 ship_count: row.get("ship_count"),
-                ships: row.get("ships"),
                 created_at: row.get("created_at"),
             }
         })

@@ -1,5 +1,6 @@
 .env
 target
+k8s
 *.sqlite
 Makefile
 docker/api/Dockerfile

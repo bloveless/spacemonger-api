@@ -9,6 +9,7 @@ use dotenv::dotenv;
 use tokio::time::Duration;
 use spacetraders::shared::LoanType;
 use crate::ship_machine::{TickResult, ShipAssignment};
+use spacetraders::errors::SpaceTradersClientError;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -150,14 +151,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut prev_user_credits = 0;
             loop {
                 for machine in &mut user.ship_machines {
-                    let tick_result = machine.tick().await;
-
-                    // TODO: Maybe there will be some signals that come back from the tick
-                    //       function that we should close and respawn the task... or handle errors
-                    //       or something like that
-                    if let Some(tick_result) = tick_result.unwrap_or(None) {
-                        match tick_result {
-                            TickResult::UpdateCredits(credits) => user.credits = credits,
+                    match machine.tick().await {
+                        Ok(tick_result) => {
+                            // TODO: Maybe there will be some signals that come back from the tick
+                            //       function that we should close and respawn the task... or handle errors
+                            //       or something like that
+                            if let Some(tick_result) = tick_result {
+                                match tick_result {
+                                    TickResult::UpdateCredits(credits) => user.credits = credits,
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            if let Some(e) = e.downcast_ref::<SpaceTradersClientError>() {
+                                match e {
+                                    // TODO: There is one thing that concerns me about this... if the service unavailable
+                                    //       message lasts for less than three minutes then the pod could end up in
+                                    //       a state where some of the tasks have panic'd and others have not which
+                                    //       would keep the pod running... consider how to fix this... later
+                                    SpaceTradersClientError::ServiceUnavailable => {
+                                        panic!("Caught a service unavailable error. Restarting the pod");
+                                    }
+                                    // NOTE: All other errors we are just going to skip because the state machine
+                                    //       will just try it again... which is fine
+                                    // SpaceTradersClientError::Http(_) => {}
+                                    // SpaceTradersClientError::ApiError(_) => {}
+                                    // SpaceTradersClientError::TooManyRetries => {}
+                                    // SpaceTradersClientError::JsonParse(_) => {}
+                                    other_error => {
+                                        log::error!("Caught a space traders client. Error: {}", other_error);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -173,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // We want to keep a base amount of 500k but as we get more ships it is more
                     // costly to fill them with goods so we add 75k per ship to make sure we don't
                     // go broke
-                    if user.credits > (500_000 + (user.ship_machines.len() as i32 * 75_000)) && user.ship_machines.len() < 100 {
+                    if user.credits > (500_000 + (user.ship_machines.len() as i32 * 75_000)) && user.ship_machines.len() < 200 {
                         match user.purchase_largest_ship(None).await {
                             Ok(_) => {}
                             Err(e) => log::error!("{} -- Error occurred while purchasing a ship. Error: {}", user.username, e)

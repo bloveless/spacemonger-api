@@ -4,7 +4,7 @@ use spacetraders::shared::Good;
 use chrono::{DateTime, Utc, Duration};
 use crate::{db, funcs};
 use crate::db::DbRoute;
-use std::cmp::max;
+use std::cmp::{max, min};
 use rand::seq::SliceRandom;
 
 #[derive(Debug, Clone)]
@@ -159,11 +159,12 @@ impl ShipMachine {
             ShipState::MoveToLocation => {
                 let ship = self.client.get_my_ship(&self.ship_id).await?;
 
-                let fuel_required = funcs::get_fuel_required_for_trip(self.pg_pool.clone(), &ship.ship.location.unwrap(), &self.destination, &ship.ship.ship_type).await?;
                 let current_fuel = ship.ship.cargo.into_iter()
                     .filter(|c| c.good == Good::Fuel)
                     .fold(0, |acc, c| acc + c.quantity);
-                let fuel_required = fuel_required.ceil() as i32 - current_fuel;
+
+                let fuel_required = funcs::get_fuel_required_for_trip(self.pg_pool.clone(), &ship.ship.location.unwrap(), &self.destination, &ship.ship.ship_type).await?;
+                let fuel_required = fuel_required.ceil() as i32;
 
                 let mut new_user_credits = 0;
                 if current_fuel < fuel_required {
@@ -173,7 +174,8 @@ impl ShipMachine {
                         self.pg_pool.clone(),
                         &self.ship_id,
                         Good::Fuel,
-                        fuel_required - current_fuel,
+                        // Don't ever try and buy more fuel than the ship can hold
+                        min(fuel_required - current_fuel, ship.ship.space_available),
                     ).await?;
 
                     new_user_credits = purchase_order.credits;

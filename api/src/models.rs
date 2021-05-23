@@ -24,6 +24,7 @@ pub struct User {
     pub location_symbol: Option<String>,
     pub credits: i32,
     pub ship_count: i32,
+    pub ships: Option<String>,
     pub stats_updated_at: DateTime<Utc>,
 }
 
@@ -32,7 +33,6 @@ pub struct UserStats {
     pub user_id: String,
     pub credits: i32,
     pub ship_count: i32,
-    pub ships: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
