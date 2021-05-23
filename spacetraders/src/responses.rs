@@ -94,8 +94,10 @@ pub struct PayLoanUser {
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct PayLoanResponse {
-    /// The newest user info after paying the loan
-    pub user: PayLoanUser,
+    /// Users new credits after paying off the loan
+    pub credits: i32,
+    /// Users new loans after paying off the loan
+    pub loans: Vec<shared::Loan>,
 }
 
 /// The representation of a ships for sale request

@@ -214,9 +214,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         match user.pay_off_loan(&loan.id).await {
                             Ok(pay_loan_response) => {
                                 log::info!("{} -- User paid off loan id {}", user.username, loan.id);
-                                user.loans = pay_loan_response.user.loans.clone();
-                                user.outstanding_loans = pay_loan_response.user.loans.into_iter().filter(|l| { !l.status.contains("PAID") }).count();
-                                user.credits = pay_loan_response.user.credits;
+                                user.loans = pay_loan_response.loans.clone();
+                                user.outstanding_loans = pay_loan_response.loans.into_iter().filter(|l| { !l.status.contains("PAID") }).count();
+                                user.credits = pay_loan_response.credits;
                             }
                             Err(e) => log::error!("{} -- Unable to pay off loan id {}. Error: {}", user.username, loan.id, e)
                         }
