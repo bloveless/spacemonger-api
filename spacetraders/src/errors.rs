@@ -16,6 +16,8 @@ pub enum SpaceTradersClientError {
     JsonParse(serde_json::Error),
     /// If the SpaceTraders API is in maintenance mode
     ServiceUnavailable,
+    /// If the token is invalid for the request being made
+    Unauthorized,
 }
 
 impl fmt::Display for SpaceTradersClientError {
@@ -26,6 +28,7 @@ impl fmt::Display for SpaceTradersClientError {
             SpaceTradersClientError::JsonParse(ref err) => write!(f, "Error parsing game status response: {}", err),
             SpaceTradersClientError::ApiError(ref err) => write!(f, "Api error: {}", err),
             SpaceTradersClientError::TooManyRetries => write!(f, "Too many retries attempted"),
+            SpaceTradersClientError::Unauthorized => write!(f, "Request returned unauthorized")
         }
     }
 }

@@ -8,7 +8,7 @@ use std::env;
 use dotenv::dotenv;
 use tokio::time::Duration;
 use spacetraders::shared::LoanType;
-use crate::ship_machine::{TickResult, ShipAssignment};
+use crate::ship_machine::{ShipAssignment, PollResult};
 use spacetraders::errors::SpaceTradersClientError;
 
 #[tokio::main]
@@ -151,14 +151,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut prev_user_credits = 0;
             loop {
                 for machine in &mut user.ship_machines {
-                    match machine.tick().await {
-                        Ok(tick_result) => {
+                    match machine.poll().await {
+                        Ok(poll_result) => {
                             // TODO: Maybe there will be some signals that come back from the tick
                             //       function that we should close and respawn the task... or handle errors
                             //       or something like that
-                            if let Some(tick_result) = tick_result {
-                                match tick_result {
-                                    TickResult::UpdateCredits(credits) => user.credits = credits,
+                            if let Some(poll_result) = poll_result {
+                                match poll_result {
+                                    PollResult::UpdateCredits(credits) => user.credits = credits,
                                 }
                             }
                         }
@@ -171,6 +171,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     //       would keep the pod running... consider how to fix this... later
                                     SpaceTradersClientError::ServiceUnavailable => {
                                         panic!("Caught a service unavailable error. Restarting the pod");
+                                    }
+                                    SpaceTradersClientError::Unauthorized => {
+                                        panic!("Api returned Unauthorized response. Restarting the pod");
                                     }
                                     // NOTE: All other errors we are just going to skip because the state machine
                                     //       will just try it again... which is fine

@@ -12,6 +12,7 @@ use tokio::time::Duration;
 use std::fmt::{Debug, Formatter};
 use std::collections::HashMap;
 use crate::errors::SpaceTradersClientError;
+use chrono::format::Pad::Space;
 
 /// HttpClient is a thread-safe rate-limited space traders client
 pub type HttpClient = Arc<Mutex<SpaceTradersClient>>;
@@ -130,6 +131,8 @@ impl SpaceTradersClient {
                         tokio::time::sleep(Duration::from_secs_f64(retry_after)).await;
 
                         continue;
+                    } else if response_status == 401 {
+                        return Err(SpaceTradersClientError::Unauthorized);
                     } else if response_status == 500 {
                         // If there was an internal server error then try the request again in 2 seconds
                         log::error!("Caught internal server error retrying in 2 seconds. {}", response_text);

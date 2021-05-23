@@ -8,7 +8,7 @@ use std::cmp::{max, min};
 use rand::seq::SliceRandom;
 
 #[derive(Debug, Clone)]
-pub enum TickResult {
+pub enum PollResult {
     UpdateCredits(i32),
 }
 
@@ -72,7 +72,7 @@ impl ShipMachine {
         }
     }
 
-    pub async fn tick(&mut self) -> Result<Option<TickResult>, Box<dyn std::error::Error>> {
+    pub async fn poll(&mut self) -> Result<Option<PollResult>, Box<dyn std::error::Error>> {
         match self.state {
             ShipState::CheckIfMoving => {
                 let ships = self.client.get_my_ships().await?;
@@ -195,7 +195,7 @@ impl ShipMachine {
                 self.state = ShipState::WaitForArrival;
 
                 if new_user_credits > 0 {
-                    return Ok(Some(TickResult::UpdateCredits(new_user_credits)));
+                    return Ok(Some(PollResult::UpdateCredits(new_user_credits)));
                 }
             }
             ShipState::HarvestMarketData => match self.assignment.clone() {
@@ -241,7 +241,7 @@ impl ShipMachine {
                 self.state = ShipState::PickBestTrade;
 
                 if new_user_credits > 0 {
-                    return Ok(Some(TickResult::UpdateCredits(new_user_credits)));
+                    return Ok(Some(PollResult::UpdateCredits(new_user_credits)));
                 }
             }
             ShipState::PickBestTrade => {
@@ -258,7 +258,7 @@ impl ShipMachine {
                     if route.sell_location_symbol != "OE-XV-91-2" && route.purchase_quantity > 500 && route.profit_speed_volume_distance > 0.0 {
                         log::info!("{} -- Trading {} from {} to {} (purchase quantity {}, sell quantity {})", self.username, route.good, route.purchase_location_symbol, route.sell_location_symbol, route.purchase_quantity, route.sell_quantity);
 
-                        self.route = Some(route.to_owned());
+                        self.route = Some(route);
                         self.state = ShipState::PurchaseMaxGoodForTrading;
 
                         return Ok(None);
@@ -316,7 +316,7 @@ impl ShipMachine {
                         self.destination = route.sell_location_symbol;
                         self.state = ShipState::MoveToLocation;
 
-                        return Ok(Some(TickResult::UpdateCredits(purchase_order.credits)));
+                        return Ok(Some(PollResult::UpdateCredits(purchase_order.credits)));
                     },
                     Err(e) => {
                         log::error!("{} -- Unable to create purchase order. Picking a new trade. Error: {}", self.username, e);
