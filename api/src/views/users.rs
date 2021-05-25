@@ -74,14 +74,17 @@ pub async fn user_stats(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
     }
 
     let user_stats = sqlx::query("
-        SELECT
+        SELECT DISTINCT ON (CAST (extract(epoch from date_trunc('second', dus.created_at)) AS integer) / 120) created_at,
              user_id::text
             ,credits
             ,ship_count
             ,created_at
         FROM daemon_user_stats dus
-        WHERE dus.user_id = $1::uuid
-        ORDER BY created_at ASC;
+        WHERE dus.created_at > (now() - '7 days'::interval)
+        AND user_id = $1::uuid
+        ORDER BY
+            CAST (extract(epoch from date_trunc('second', dus.created_at)) AS integer) / 120 ASC,
+            dus.created_at ASC
     ")
         .bind(user_id.as_str())
         .map(|row: PgRow| {

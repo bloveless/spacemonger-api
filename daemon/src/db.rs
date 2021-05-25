@@ -572,3 +572,52 @@ pub async fn persist_request_response(
 
     Ok(())
 }
+
+pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -> Result<(), Box<dyn std::error::Error>> {
+    sqlx::query("
+        INSERT INTO daemon_user_ship (
+             user_id
+            ,ship_id
+            ,type
+            ,class
+            ,max_cargo
+            ,speed
+            ,manufacturer
+            ,plating
+            ,weapons
+        ) VALUES (
+             $1::uuid
+            ,$2
+            ,$3
+            ,$4
+            ,$5
+            ,$6
+            ,$7
+            ,$8
+            ,$9
+        )
+        ON CONFLICT (user_id, ship_id)
+        DO UPDATE SET
+             type = $3
+            ,class = $4
+            ,max_cargo = $5
+            ,speed = $6
+            ,manufacturer = $7
+            ,plating = $8
+            ,weapons = $9
+            ,modified_at = timezone('utc', NOW());
+    ")
+        .bind(user_id)
+        .bind(&ship.id)
+        .bind(&ship.ship_type)
+        .bind(&ship.class)
+        .bind(&ship.max_cargo)
+        .bind(&ship.speed)
+        .bind(&ship.manufacturer)
+        .bind(&ship.plating)
+        .bind(&ship.weapons)
+        .execute(&pg_pool)
+        .await?;
+
+    Ok(())
+}

@@ -58,7 +58,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ShipAssignment::Trader,
     ).await;
 
-    if user.is_err() {
+    if let Err(user_err) = user {
+        log::error!("Main user error: {}", user_err);
         if enable_reset {
             db::reset_db(pg_pool.clone()).await?;
         }

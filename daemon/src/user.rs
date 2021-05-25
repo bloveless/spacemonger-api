@@ -40,7 +40,7 @@ impl User {
                 token: user.token.clone(),
                 id: user.id,
                 client,
-                pg_pool,
+                pg_pool: pg_pool.clone(),
                 assignment: assignment.clone(),
                 ship_machines: Vec::new(),
                 credits: info.user.credits,
@@ -49,6 +49,10 @@ impl User {
             };
 
             user.add_ship_machines_from_user_info(&ships, &assignment);
+
+            for ship in &ships.ships {
+                db::persist_ship(pg_pool.clone(), &user.id, ship).await?;
+            }
 
             Ok(user)
         } else {
@@ -78,7 +82,7 @@ impl User {
                 token: claimed_user.token.clone(),
                 id: db_user.id,
                 client,
-                pg_pool,
+                pg_pool: pg_pool.clone(),
                 assignment: assignment.clone(),
                 ship_machines: Vec::new(),
                 credits: info.user.credits,
@@ -87,6 +91,10 @@ impl User {
             };
 
             user.add_ship_machines_from_user_info(&ships, &assignment);
+
+            for ship in &ships.ships {
+                db::persist_ship(pg_pool.clone(), &user.id, ship).await?;
+            }
 
             Ok(user)
         }
@@ -123,6 +131,9 @@ impl User {
 
     pub async fn purchase_ship(&mut self, fastest_ship_location: String, ship_type: String) -> Result<(), Box<dyn std::error::Error>> {
         let purchase_ship_response = self.client.purchase_ship(fastest_ship_location, ship_type).await?;
+
+        // TODO: Record new ship
+        db::persist_ship(self.pg_pool.clone(), &self.id, &purchase_ship_response.ship).await?;
 
         self.credits = purchase_ship_response.credits;
         self.ship_machines.push(self.ship_to_machine(&purchase_ship_response.ship, &self.assignment));

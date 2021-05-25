@@ -12,7 +12,6 @@ use tokio::time::Duration;
 use std::fmt::{Debug, Formatter};
 use std::collections::HashMap;
 use crate::errors::SpaceTradersClientError;
-use chrono::format::Pad::Space;
 
 /// HttpClient is a thread-safe rate-limited space traders client
 pub type HttpClient = Arc<Mutex<SpaceTradersClient>>;
