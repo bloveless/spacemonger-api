@@ -8,8 +8,6 @@ jobs:
     resource_class: arm.medium
     steps:
       - checkout
-      - setup_remote_docker:
-          version: 19.03.13
       - run: |
           TAG=0.1.$CIRCLE_BUILD_NUM
           docker build -t bloveless/spacemongerd:$TAG -f ./docker/daemon/Dockerfile .
