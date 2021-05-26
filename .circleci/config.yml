@@ -4,14 +4,14 @@ jobs:
   build:
     working_directory: /app
     docker:
-      image: 
+      image: 20.10.6
     machine:
       image: ubuntu-2004:202101-01
     resource_class: arm.medium
     steps:
       - checkout
       - setup_remote_docker:
-          version: 19.03.13
+          version: 20.10.6
           docker_layer_caching: true
       - run: |
           TAG=0.1.$CIRCLE_BUILD_NUM
