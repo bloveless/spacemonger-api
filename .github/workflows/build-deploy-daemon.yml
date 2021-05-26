@@ -35,15 +35,15 @@ jobs:
 #         with:
 #           username: ${{ secrets.DOCKERHUB_USERNAME }}
 #           password: ${{ secrets.DOCKERHUB_TOKEN }}
-#       -
-#         name: Build and push
-#         uses: docker/build-push-action@v2
-#         with:
-#           context: .
-#           file: ./docker/daemon/Dockerfile
-#           platforms: linux/arm64
-#           # push: true
-#           tags: bloveless/spacemongerd:latest,${{ steps.vars.outputs.sha_short }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./docker/daemon/Dockerfile
+          platforms: linux/arm64
+          # push: true
+          tags: bloveless/spacemongerd:latest,${{ steps.vars.outputs.sha_short }}
 #           cache-from: type=local,src=/tmp/.buildx-cache
 #           cache-to: type=local,dest=/tmp/.buildx-cache-new
         # This ugly bit is necessary if you don't want your cache to grow forever
@@ -56,14 +56,14 @@ jobs:
 #         run: |
 #           rm -rf /tmp/.buildx-cache
 #           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-      - name: Buildah Build
-        uses: redhat-actions/buildah-build@v2
-        with:
-          context: .
-          layers: true
-          dockerfiles: ./docker/daemon/Dockerfile
-          image: bloveless/spacemongerd
-          tags: latest ${{ steps.vars.outputs.sha_short }}
+#       - name: Buildah Build
+#         uses: redhat-actions/buildah-build@v2
+#         with:
+#           context: .
+#           layers: true
+#           dockerfiles: ./docker/daemon/Dockerfile
+#           image: bloveless/spacemongerd
+#           tags: latest ${{ steps.vars.outputs.sha_short }}
 #       - name: Push To Registry
 #         uses: redhat-actions/push-to-registry@v2
 #         with:
