@@ -33,7 +33,7 @@ jobs:
         with:
           # docker buildx build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:0.1.0-alpha.62 --push .
           context: .
-          dockerfile: ./docker/daemon/Dockerfile
+          file: ./docker/daemon/Dockerfile
           platforms: linux/arm64
 #           push: true
           tags: bloveless/spacemongerd:latest,${{ steps.vars.outputs.sha_short }}
