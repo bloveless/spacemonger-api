@@ -8,9 +8,10 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
-    env:
-      SHA8: ${{ github.sha::8 }}
     steps:
+      - name: Set outputs
+        id: vars
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
       -
         name: Checkout
         uses: actions/checkout@v2
@@ -33,4 +34,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
 #           push: true
-          tags: bloveless/spacetraders-api:latest,${{ env.SHA8 }}
+          tags: bloveless/spacetraders-api:latest,${{ steps.vars.outputs.sha_short }}
