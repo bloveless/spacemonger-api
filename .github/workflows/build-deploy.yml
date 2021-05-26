@@ -8,6 +8,8 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    env:
+      SHA8: ${GITHUB_SHA::8}
     steps:
       -
         name: Checkout
@@ -31,4 +33,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
 #           push: true
-          tags: user/app:latest,${GITHUB_SHA::8}
+          tags: bloveless/spacetraders-api:latest,$SHA8
