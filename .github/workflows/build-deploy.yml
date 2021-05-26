@@ -33,4 +33,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
 #           push: true
-          tags: bloveless/spacetraders-api:latest,$SHA8
+          tags: bloveless/spacetraders-api:latest,${{ env.SHA8 }}
