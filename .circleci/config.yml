@@ -1,0 +1,21 @@
+version: 2.1
+
+jobs:
+  build:
+    machine:
+      image: ubuntu-2004:202101-01
+    resource_class: arm.medium
+    steps:
+      - checkout
+      - run: |
+          TAG=0.1.$CIRCLE_BUILD_NUM
+          docker build -t bloveless/spacemongerd:$TAG -f ./docker/daemon/Dockerfile .
+
+workflows:
+  version: 2
+  build-main:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: main
