@@ -26,18 +26,18 @@ pub async fn create_flight_plan(client: Client, pg_pool: PgPool, user_id: &str, 
     Ok(flight_plan)
 }
 
-pub async fn create_purchase_order(client: Client, pg_pool: PgPool, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
+pub async fn create_purchase_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
     let purchase_order = client.create_purchase_order(ship_id.to_string(), good, quantity).await?;
 
-    // TODO: Save purchase order to db
+    db::persist_transaction(pg_pool.clone(), "purchase", user_id, &purchase_order).await?;
 
     Ok(purchase_order)
 }
 
-pub async fn create_sell_order(client: Client, pg_pool: PgPool, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
+pub async fn create_sell_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
     let sell_order = client.create_sell_order(ship_id.to_string(), good, quantity).await?;
 
-    // TODO: Save sell order to db
+    db::persist_transaction(pg_pool.clone(), "sell", user_id, &sell_order).await?;
 
     Ok(sell_order)
 }

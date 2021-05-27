@@ -20,14 +20,14 @@ spec:
     spec:
       containers:
       - name: spacemongerd
-        image: bloveless/spacemongerd:0.1.0-alpha.62
+        image: bloveless/spacemongerd:0.1.0-alpha.64
         command: ["/app/spacemongerd"]
         envFrom:
         - secretRef:
             name: spacemonger
         env:
         - name: USERNAME_BASE
-          value: bloveless
+          value: bloveless1
         - name: POSTGRES_HOST
           value: 192.168.4.252
         - name: POSTGRES_PORT

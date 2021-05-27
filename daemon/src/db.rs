@@ -621,3 +621,39 @@ pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -
 
     Ok(())
 }
+
+pub async fn persist_transaction(pg_pool: PgPool, transaction_type: &str, user_id: &str, order: &responses::PurchaseOrder) -> Result<(), Box<dyn std::error::Error>> {
+    sqlx::query("
+        INSERT INTO daemon_user_transaction (
+             user_id
+            ,ship_id
+            ,type
+            ,good_symbol
+            ,price_per_unit
+            ,quantity
+            ,total
+            ,location_symbol
+        ) VALUES (
+             $1::uuid
+            ,$2
+            ,$3
+            ,$4
+            ,$5
+            ,$6
+            ,$7
+            ,$8
+        )
+    ")
+        .bind(user_id)
+        .bind(&order.ship.id)
+        .bind(transaction_type)
+        .bind(&order.order.good.to_string())
+        .bind(&order.order.price_per_unit)
+        .bind(&order.order.quantity)
+        .bind(&order.order.total)
+        .bind(&order.ship.location.clone().unwrap_or_else(|| "UNKNOWN".to_string()))
+        .execute(&pg_pool)
+        .await?;
+
+    Ok(())
+}

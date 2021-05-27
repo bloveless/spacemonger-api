@@ -172,6 +172,7 @@ impl ShipMachine {
                     let purchase_order = funcs::create_purchase_order(
                         self.client.clone(),
                         self.pg_pool.clone(),
+                        &self.user_id,
                         &self.ship_id,
                         Good::Fuel,
                         // Don't ever try and buy more fuel than the ship can hold
@@ -234,7 +235,7 @@ impl ShipMachine {
                 let mut new_user_credits = 0;
                 for cargo in ship.ship.cargo {
                     log::info!("{} -- Selling {} goods {} at {}", self.username, cargo.quantity, cargo.good, ship.ship.location.clone().unwrap());
-                    let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &self.ship_id, cargo.good, cargo.quantity).await?;
+                    let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &self.user_id, &self.ship_id, cargo.good, cargo.quantity).await?;
                     new_user_credits = sell_order.credits;
                 }
 
@@ -305,6 +306,7 @@ impl ShipMachine {
                 match funcs::create_purchase_order(
                     self.client.clone(),
                     self.pg_pool.clone(),
+                    &self.user_id,
                     &self.ship_id,
                     route.good,
                     room_available_for_trading / route.good.get_volume(),
