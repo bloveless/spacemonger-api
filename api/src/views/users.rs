@@ -13,7 +13,7 @@ pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
                     ,ship_count
                     ,ships
                     ,created_at
-                    ,ROW_NUMBER() OVER (ORDER BY created_at DESC) as rank
+                    ,ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rank
                 FROM daemon_user_stats
             )
             SELECT
