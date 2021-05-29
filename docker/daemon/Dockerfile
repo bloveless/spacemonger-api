@@ -1,4 +1,4 @@
-FROM rust:1.52-buster as planner
+FROM rust:1.52-buster as planner-daemon
 
 WORKDIR app
 
@@ -8,21 +8,21 @@ COPY . .
 
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM rust:1.52-buster as cacher
+FROM rust:1.52-buster as cacher-daemon
 
 WORKDIR app
 RUN cargo install cargo-chef --version 0.1.20
-COPY --from=planner /app/recipe.json recipe.json
+COPY --from=planner-daemon /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
-FROM rust:1.52-buster as builder
+FROM rust:1.52-buster as builder-daemon
 
 WORKDIR /app/
 
 COPY . .
 
-COPY --from=cacher /app/target target
-COPY --from=cacher /usr/local/cargo /usr/local/cargo
+COPY --from=cacher-daemon /app/target target
+COPY --from=cacher-daemon /usr/local/cargo /usr/local/cargo
 
 RUN cargo build --release --package spacemonger-daemon --bin spacemongerd
 
@@ -41,7 +41,7 @@ WORKDIR /app
 
 USER spacemonger
 
-COPY --from=builder --chown=spacemonger:spacemonger /app/target/release/spacemongerd /app/
+COPY --from=builder-daemon --chown=spacemonger:spacemonger /app/target/release/spacemongerd /app/
 COPY --chown=spacemonger:spacemonger ./docker/daemon/entrypoint.sh /app/
 
 ENTRYPOINT ["/app/entrypoint.sh"]

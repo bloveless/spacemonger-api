@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: spacemongerd
-        image: bloveless/spacemongerd:0.1.0-alpha.65
+        image: bloveless/spacemongerd:0.1.0-alpha.67
         command: ["/app/spacemongerd"]
         envFrom:
         - secretRef:

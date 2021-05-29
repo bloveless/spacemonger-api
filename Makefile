@@ -1,5 +1,5 @@
 publish-daemon:
-	docker buildx build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:0.1.0-alpha.65 --push .
+	docker buildx build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:0.1.0-alpha.67 --push .
 
 publish-api:
 	docker buildx build --platform linux/arm64 -f docker/api/Dockerfile -t bloveless/spacemonger-api:0.1.0-alpha.13 --push .
