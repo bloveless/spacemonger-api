@@ -1653,6 +1653,7 @@ dependencies = [
 name = "spacemonger-daemon"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "dotenv",
  "env_logger",

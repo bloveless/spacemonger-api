@@ -19,8 +19,8 @@ spec:
         component: spacemongerd
     spec:
       containers:
-      - name: spacemongerd
-        image: bloveless/spacemongerd:0.1.0-alpha.67
+      - name: spacemongerd-trader
+        image: bloveless/spacemongerd:0.1.0-alpha.74
         command: ["/app/spacemongerd"]
         envFrom:
         - secretRef:
@@ -36,12 +36,45 @@ spec:
           value: spacemonger
         - name: POSTGRES_DATABASE
           value: spacemonger
-        - name: ENABLE_SCOUTS
+        - name: ENABLE_TRADER
           value: "true"
+        - name: ENABLE_SCOUTS
+          value: "false"
         - name: ENABLE_RESET
           value: "true"
         - name: RUST_LOG
           value: spacemongerd=debug,spacetraders=info
+      - name: spacemongerd-scouts
+        image: bloveless/spacemongerd:0.1.0-alpha.74
+        command: ["/app/spacemongerd"]
+        envFrom:
+          - secretRef:
+              name: spacemonger
+        env:
+          - name: USERNAME_BASE
+            value: bloveless1
+          - name: POSTGRES_HOST
+            value: 192.168.4.252
+          - name: POSTGRES_PORT
+            value: '5432'
+          - name: POSTGRES_USERNAME
+            value: spacemonger
+          - name: POSTGRES_DATABASE
+            value: spacemonger
+          - name: ENABLE_TRADER
+            value: "false"
+          - name: ENABLE_SCOUTS
+            value: "true"
+          - name: ENABLE_RESET
+            value: "false"
+          - name: RUST_LOG
+            value: spacemongerd=debug,spacetraders=trace
+          - name: HTTP_PROXY
+            value: 127.0.0.1:9080
+      - name: tor
+        image: bloveless/tor:0.1.0-alpha.4
+        ports:
+          - containerPort: 9080
       restartPolicy: Always
 ---
 apiVersion: apps/v1
@@ -66,7 +99,7 @@ spec:
     spec:
       containers:
         - name: spacemonger-api
-          image: bloveless/spacemonger-api:0.1.0-alpha.13
+          image: bloveless/spacemonger-api:0.1.0-alpha.17
           command: ["/app/spacemonger-api"]
           envFrom:
             - secretRef:

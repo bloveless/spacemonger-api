@@ -1,8 +1,21 @@
+daemon_tag = 0.1.0-alpha.74
+tor_tag = 0.1.0-alpha.4
+api_tag = 0.1.0-alpha.17
+
 publish-daemon:
-	docker buildx build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:0.1.0-alpha.67 --push .
+	docker build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:$(daemon_tag) .
+	docker push bloveless/spacemongerd:$(daemon_tag)
+
+publish-tor:
+	docker build --platform linux/arm64 -f docker/tor/Dockerfile -t bloveless/tor:$(tor_tag) .
+	docker push bloveless/tor:$(tor_tag)
+
+deploy:
+	kubectl apply -k ./k8s/
 
 publish-api:
-	docker buildx build --platform linux/arm64 -f docker/api/Dockerfile -t bloveless/spacemonger-api:0.1.0-alpha.13 --push .
+	docker build --platform linux/arm64 -f docker/api/Dockerfile -t bloveless/spacemonger-api:$(api_tag) .
+	docker push bloveless/spacemonger-api:$(api_tag)
 
 migration-daemon:
 	cd daemon; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate add $(name)

@@ -60,9 +60,15 @@ pub struct SpaceTradersClientResponse {
 }
 
 impl SpaceTradersClient {
-    fn new() -> Self {
+    fn new(proxy: Option<String>) -> Self {
+        let mut client_builder = reqwest::ClientBuilder::new();
+
+        if let Some(proxy) = proxy {
+            client_builder = client_builder.proxy(reqwest::Proxy::all(proxy).unwrap());
+        }
+
         Self {
-            client: reqwest::Client::new(),
+            client: client_builder.build().unwrap(),
             post_request_hook: None,
         }
     }
@@ -167,14 +173,14 @@ impl SpaceTradersClient {
 }
 
 /// Get a rate-limited http client that is safe to use across threads and won't break rate-limiting
-pub fn get_http_client() -> HttpClient {
-    Arc::new(Mutex::new(SpaceTradersClient::new()))
+pub fn get_http_client(proxy: Option<String>) -> HttpClient {
+    Arc::new(Mutex::new(SpaceTradersClient::new(proxy)))
 }
 
 /// Get a rate-limited http client, with post receive hook, that is safe to use across threads and
 /// won't break rate-limiting
-pub fn get_http_client_with_hook(hook: PostRequestHook) -> HttpClient {
-    let mut client = SpaceTradersClient::new();
+pub fn get_http_client_with_hook(proxy: Option<String>, hook: PostRequestHook) -> HttpClient {
+    let mut client = SpaceTradersClient::new(proxy);
     client.set_post_request_hook(hook);
 
     Arc::new(Mutex::new(client))
@@ -236,6 +242,20 @@ pub async fn get_game_status(http_client: HttpClient) -> Result<responses::GameS
     }
 
     parse_response::<responses::GameStatus>(&response.response_text)
+}
+
+/// Get the users current ip address
+pub async fn get_my_ip_address(http_client: HttpClient) -> Result<responses::MyIpAddress, SpaceTradersClientError> {
+    let http_client = http_client.lock().await;
+    let response = http_client.execute_request(
+        "GET",
+        "https://api.ipify.org?format=json",
+        None,
+        None,
+    )
+        .await?;
+
+    parse_response::<responses::MyIpAddress>(&response.response_text)
 }
 
 /// A SpaceTraders client that is associated to a specific username

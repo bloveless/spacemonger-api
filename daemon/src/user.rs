@@ -5,8 +5,8 @@ use sqlx::PgPool;
 use spacetraders::{client, responses, shared};
 use spacetraders::responses::MyShips;
 use spacetraders::shared::LoanType;
-use crate::ship_machine::{ShipMachine, ShipAssignment};
 use spacetraders::errors::SpaceTradersClientError;
+use crate::ship_machines::{ShipMachine, ShipAssignment, new_trader_machine, new_scout_machine};
 
 #[derive(Debug, Clone)]
 pub struct User {
@@ -23,7 +23,7 @@ pub struct User {
 }
 
 impl User {
-    pub async fn new(http_client: HttpClient, pg_pool: PgPool, username: String, assignment: ShipAssignment) -> Result<User, Box<dyn std::error::Error>> {
+    pub async fn new(http_client: HttpClient, pg_pool: PgPool, username: String, assignment: ShipAssignment) -> anyhow::Result<User> {
         let db_user = db::get_user(pg_pool.clone(), username.clone()).await?;
 
         if let Some(user) = db_user {
@@ -107,17 +107,27 @@ impl User {
     }
 
     fn ship_to_machine(&self, ship: &shared::Ship, assignment: &ShipAssignment) -> ShipMachine {
-        ShipMachine::new(
-            self.client.clone(),
-            self.pg_pool.clone(),
-            self.username.clone(),
-            ship.id.clone(),
-            self.id.clone(),
-            assignment.clone(),
-        )
+        match assignment {
+            ShipAssignment::Trader => new_trader_machine(
+                self.client.clone(),
+                self.pg_pool.clone(),
+                self.username.clone(),
+                ship.id.clone(),
+                self.id.clone(),
+            ),
+            ShipAssignment::Scout { system_symbol, location_symbol } => new_scout_machine(
+                self.client.clone(),
+                self.pg_pool.clone(),
+                self.username.clone(),
+                ship.id.clone(),
+                self.id.clone(),
+                system_symbol.to_owned(),
+                location_symbol.to_owned()
+            )
+        }
     }
 
-    pub async fn request_new_loan(&mut self, loan_type: LoanType) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn request_new_loan(&mut self, loan_type: LoanType) -> anyhow::Result<()> {
         let loan_response = self.client.request_new_loan(loan_type).await?;
 
         // Update our info to contain the new data from the loan response
@@ -129,7 +139,7 @@ impl User {
         Ok(())
     }
 
-    pub async fn purchase_ship(&mut self, fastest_ship_location: String, ship_type: String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn purchase_ship(&mut self, fastest_ship_location: String, ship_type: String) -> anyhow::Result<()> {
         let purchase_ship_response = self.client.purchase_ship(fastest_ship_location, ship_type).await?;
 
         // TODO: Record new ship
@@ -141,7 +151,7 @@ impl User {
         Ok(())
     }
 
-    pub async fn purchase_fastest_ship(&mut self, system_symbol: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn purchase_fastest_ship(&mut self, system_symbol: Option<&str>) -> anyhow::Result<()> {
         let available_ships = self.client.get_ships_for_sale().await?;
         let mut fastest_ship = None;
         let mut fastest_ship_speed: i32 = 0;
@@ -191,7 +201,7 @@ impl User {
         Ok(())
     }
 
-    pub async fn purchase_largest_ship(&mut self, system_symbol: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn purchase_largest_ship(&mut self, system_symbol: Option<&str>) -> anyhow::Result<()> {
         let available_ships = self.client.get_ships_for_sale().await?;
         let mut largest_ship = None;
         let mut largest_ship_capacity: i32 = 0;
@@ -241,7 +251,7 @@ impl User {
         Ok(())
     }
 
-    pub async fn get_systems(&self) -> Result<responses::SystemsInfo, Box<dyn std::error::Error>> {
+    pub async fn get_systems(&self) -> anyhow::Result<responses::SystemsInfo> {
         let systems_info = self.client.get_systems_info().await?;
         log::debug!("Systems info: {:?}", systems_info);
 

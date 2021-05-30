@@ -1,18 +1,19 @@
 mod funcs;
 mod db;
 mod user;
-mod ship_machine;
+mod ship_machines;
 
 use spacetraders::client;
 use std::env;
 use dotenv::dotenv;
 use tokio::time::Duration;
 use spacetraders::shared::LoanType;
-use crate::ship_machine::{ShipAssignment, PollResult};
 use spacetraders::errors::SpaceTradersClientError;
+use crate::ship_machines::{ShipAssignment, PollResult};
+use tokio::sync::broadcast;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     env_logger::init();
 
@@ -23,7 +24,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let postgres_password = env::var("POSTGRES_PASSWORD").unwrap();
     let postgres_database = env::var("POSTGRES_DATABASE").unwrap();
     let enable_scouts = env::var("ENABLE_SCOUTS").unwrap().parse::<bool>().unwrap();
+    let enable_trader = env::var("ENABLE_TRADER").unwrap().parse::<bool>().unwrap();
     let enable_reset = env::var("ENABLE_RESET").unwrap().parse::<bool>().unwrap();
+    let http_proxy: Option<String> = env::var("HTTP_PROXY").map(Some).unwrap_or(None);
 
     let pg_pool = db::get_db_pool(postgres_host, postgres_port, postgres_username, postgres_password, postgres_database).await?;
 
@@ -33,7 +36,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // in the system. Create (or get from db) X scout accounts (where X is number of locations in
     // the system). Send each scout account to the location they are assigned.
 
-    let http_client = client::get_http_client();
+    let http_client = client::get_http_client(http_proxy);
+
+    let my_ip_address = client::get_my_ip_address(http_client.clone()).await?;
+    log::info!("Current IP address: {}", my_ip_address.ip);
 
     if funcs::is_api_in_maintenance_mode(http_client.clone()).await {
         loop {
@@ -94,6 +100,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if enable_scouts {
         for system in &system_info.systems {
+            // Skip NA7 for now since this is a under-developed system with no resources
+            if system.symbol == "NA7" {
+                continue;
+            }
+
             for location in &system.locations {
                 let mut scout_user = user::User::new(
                     http_client.clone(),
@@ -130,27 +141,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // That's all that we need for creating new ships, but upgrading ships we need to be able to
     // notify a ship task that it needs to be upgraded
 
-    // Setup our main user
-    // 1. if the user doesn't have enough credits take out a startup loan
-    if user.credits == 0 {
-        log::info!("User {} -- Requesting new {:?} loan", user.username, LoanType::Startup);
-        // assume that if the user has 0 credits that the user needs to take out a loan
-        user.request_new_loan(LoanType::Startup).await?;
+    if enable_trader {
+        // Setup our main user
+        // 1. if the user doesn't have enough credits take out a startup loan
+        if user.credits == 0 {
+            log::info!("User {} -- Requesting new {:?} loan", user.username, LoanType::Startup);
+            // assume that if the user has 0 credits that the user needs to take out a loan
+            user.request_new_loan(LoanType::Startup).await?;
+        }
+
+        // 2. if the user doesn't have any ships then buy the largest one that the user can afford
+        if user.ship_machines.is_empty() {
+            user.purchase_largest_ship(None).await?;
+        }
+
+        users.push(user);
     }
 
-    // 2. if the user doesn't have any ships then buy the largest one that the user can afford
-    if user.ship_machines.is_empty() {
-        user.purchase_largest_ship(None).await?;
-    }
-
-    users.push(user);
-
+    let (kill_switch_tx, _) = broadcast::channel::<bool>(2);
     for user in users {
         let mut user = user.clone();
         let pg_pool = pg_pool.clone();
+        let kill_switch_tx = kill_switch_tx.clone();
+        let mut kill_switch_rx = kill_switch_tx.subscribe();
         user_handles.push(tokio::spawn(async move {
             let mut prev_user_credits = 0;
             loop {
+                if let Ok(value) = kill_switch_rx.try_recv() {
+                    log::info!("Received kill switch value {}", value);
+                    panic!("Received kill switch. Terminating thread");
+                }
+
                 for machine in &mut user.ship_machines {
                     match machine.poll().await {
                         Ok(poll_result) => {
@@ -171,10 +192,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     //       a state where some of the tasks have panic'd and others have not which
                                     //       would keep the pod running... consider how to fix this... later
                                     SpaceTradersClientError::ServiceUnavailable => {
-                                        panic!("Caught a service unavailable error. Restarting the pod");
+                                        kill_switch_tx.send(true).expect("Unable to send kill switch");
+                                        panic!("Caught a service unavailable error. Sending kill switch and restarting the pod");
                                     }
                                     SpaceTradersClientError::Unauthorized => {
-                                        panic!("Api returned Unauthorized response. Restarting the pod");
+                                        kill_switch_tx.send(true).expect("Unable to send kill switch");
+                                        panic!("Api returned Unauthorized response. Sending kill switch and restarting the pod");
                                     }
                                     // NOTE: All other errors we are just going to skip because the state machine
                                     //       will just try it again... which is fine

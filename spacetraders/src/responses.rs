@@ -4,6 +4,14 @@ use serde::Deserialize;
 use chrono::{DateTime, Utc};
 use crate::shared::Loan;
 
+/// My Ip address response
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct MyIpAddress {
+    /// My ip address
+    pub ip: String,
+}
+
 /// A representation of the game status
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]

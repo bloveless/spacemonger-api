@@ -5,9 +5,9 @@ use sqlx::{Row, PgPool};
 use chrono::{Utc, DateTime};
 use std::cmp::Ordering::Equal;
 use spacetraders::shared::Good;
-use crate::ship_machine::ShipAssignment;
 use std::collections::HashMap;
 use spacetraders::errors::SpaceTradersClientError;
+use crate::ship_machines::ShipAssignment;
 
 #[derive(Debug, Clone)]
 pub struct Ship {
@@ -62,7 +62,7 @@ pub struct DbDistanceBetweenLocations {
     pub distance: f64,
 }
 
-pub async fn get_db_pool(host: String, port: i32, username: String, password: String, database: String) -> Result<PgPool, Box<dyn std::error::Error>> {
+pub async fn get_db_pool(host: String, port: i32, username: String, password: String, database: String) -> anyhow::Result<PgPool> {
     let pg_pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&format!("postgresql://{}:{}@{}:{}/{}", username, password, host, port, database))
@@ -71,7 +71,7 @@ pub async fn get_db_pool(host: String, port: i32, username: String, password: St
     Ok(pg_pool)
 }
 
-pub async fn run_migrations(pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_migrations(pg_pool: PgPool) -> anyhow::Result<()> {
     sqlx::migrate!("./migrations")
         .run(&pg_pool)
         .await
@@ -80,7 +80,7 @@ pub async fn run_migrations(pg_pool: PgPool) -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
-pub async fn reset_db(pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn reset_db(pg_pool: PgPool) -> anyhow::Result<()> {
     let now = Utc::now();
     let now = now.format("z%Y%m%d").to_string();
 
@@ -115,7 +115,7 @@ pub async fn reset_db(pg_pool: PgPool) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<DbUser>, Box<dyn std::error::Error>> {
+pub async fn get_user(pg_pool: PgPool, username: String) -> anyhow::Result<Option<DbUser>> {
     Ok(
         sqlx::query("
             SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM daemon_user
@@ -138,7 +138,7 @@ pub async fn get_user(pg_pool: PgPool, username: String) -> Result<Option<DbUser
     )
 }
 
-pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: ShipAssignment) -> Result<DbUser, Box<dyn std::error::Error>> {
+pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: ShipAssignment) -> anyhow::Result<DbUser> {
     let assignment_type;
     let assignment_system_symbol;
     let assignment_location_symbol;
@@ -181,7 +181,7 @@ pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assi
     )
 }
 
-pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsInfoData, location: &shared::SystemsInfoLocation) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsInfoData, location: &shared::SystemsInfoLocation) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_system_info(system_symbol, system_name, location_symbol, location_name, location_type, x, y)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -207,7 +207,7 @@ pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsIn
     Ok(())
 }
 
-pub async fn get_system_locations_from_location(pg_pool: PgPool, location_symbol: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+pub async fn get_system_locations_from_location(pg_pool: PgPool, location_symbol: &str) -> anyhow::Result<Vec<String>> {
     Ok(
         sqlx::query("
             SELECT
@@ -226,7 +226,7 @@ pub async fn get_system_locations_from_location(pg_pool: PgPool, location_symbol
     )
 }
 
-pub async fn persist_flight_plan(pg_pool: PgPool, user_id: &str, ship_id: &str, flight_plan: &responses::FlightPlan) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_flight_plan(pg_pool: PgPool, user_id: &str, ship_id: &str, flight_plan: &responses::FlightPlan) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_flight_plan (
              id
@@ -257,7 +257,7 @@ pub async fn persist_flight_plan(pg_pool: PgPool, user_id: &str, ship_id: &str, 
     Ok(())
 }
 
-pub async fn get_system_location(pg_pool: PgPool, location_symbol: String) -> Result<DbSystemLocation, Box<dyn std::error::Error>> {
+pub async fn get_system_location(pg_pool: PgPool, location_symbol: String) -> anyhow::Result<DbSystemLocation> {
     Ok(
         sqlx::query("
             SELECT
@@ -290,7 +290,7 @@ pub async fn get_system_location(pg_pool: PgPool, location_symbol: String) -> Re
     )
 }
 
-pub async fn get_distance_between_locations(pg_pool: PgPool, origin: &str, destination: &str) -> Result<DbDistanceBetweenLocations, Box<dyn std::error::Error>> {
+pub async fn get_distance_between_locations(pg_pool: PgPool, origin: &str, destination: &str) -> anyhow::Result<DbDistanceBetweenLocations> {
     Ok(
         sqlx::query("
             SELECT
@@ -317,7 +317,7 @@ pub async fn get_distance_between_locations(pg_pool: PgPool, origin: &str, desti
     )
 }
 
-pub async fn get_active_flight_plan(pg_pool: PgPool, ship_id: &str) -> Result<Option<shared::FlightPlanData>, Box<dyn std::error::Error>> {
+pub async fn get_active_flight_plan(pg_pool: PgPool, ship_id: &str) -> anyhow::Result<Option<shared::FlightPlanData>> {
     Ok(
         sqlx::query("
             SELECT
@@ -358,7 +358,7 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship_id: &str) -> Result<Op
     )
 }
 
-pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketplace_data: &shared::MarketplaceData) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketplace_data: &shared::MarketplaceData) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_market_data(location_symbol, good_symbol, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
         VALUES ($1, $2, $3, $4, $5, $6, $7);
@@ -376,7 +376,7 @@ pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketp
     Ok(())
 }
 
-pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
+pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> anyhow::Result<Vec<DbRoute>> {
     let mut transaction = pg_pool.begin().await.unwrap();
 
     sqlx::query("DROP TABLE IF EXISTS tmp_latest_location_goods;")
@@ -510,7 +510,7 @@ pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> R
     Ok(routes)
 }
 
-pub async fn persist_user_stats(pg_pool: PgPool, user_id: &str, credits: i32, ships: &Vec<shared::Ship>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_user_stats(pg_pool: PgPool, user_id: &str, credits: i32, ships: &Vec<shared::Ship>) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_user_stats (user_id, credits, ship_count, ships) VALUES ($1::uuid, $2, $3, $4::json);
     ")
@@ -541,9 +541,11 @@ struct DbResponse<'a> {
 pub async fn persist_request_response(
     pg_pool: PgPool,
     method: &str, url: &str, request_body: Option<&str>,
-    response_status_code: Option<u16>, response_headers: Option<&HashMap<String, String>>, response_body: Option<&str>,
+    response_status_code: Option<u16>,
+    response_headers: Option<&HashMap<String, String>>,
+    response_body: Option<&str>,
     error: Option<&SpaceTradersClientError>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     let db_request = DbRequest {
         method,
         url,
@@ -573,7 +575,7 @@ pub async fn persist_request_response(
     Ok(())
 }
 
-pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_user_ship (
              user_id
@@ -622,7 +624,7 @@ pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -
     Ok(())
 }
 
-pub async fn persist_transaction(pg_pool: PgPool, transaction_type: &str, user_id: &str, order: &responses::PurchaseOrder) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn persist_transaction(pg_pool: PgPool, transaction_type: &str, user_id: &str, order: &responses::PurchaseOrder) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_user_transaction (
              user_id

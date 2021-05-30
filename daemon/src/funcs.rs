@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use spacetraders::client::{self, HttpClient, Client};
 use spacetraders::errors::SpaceTradersClientError;
 use sqlx::PgPool;
@@ -18,7 +19,7 @@ pub async fn is_api_in_maintenance_mode(http_client: HttpClient) -> bool {
     false
 }
 
-pub async fn create_flight_plan(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, destination: &str) -> Result<responses::FlightPlan, Box<dyn std::error::Error>> {
+pub async fn create_flight_plan(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, destination: &str) -> anyhow::Result<responses::FlightPlan> {
     let flight_plan = client.create_flight_plan(ship_id.to_string(), destination.to_string()).await?;
 
     db::persist_flight_plan(pg_pool, user_id, ship_id, &flight_plan).await?;
@@ -26,23 +27,31 @@ pub async fn create_flight_plan(client: Client, pg_pool: PgPool, user_id: &str, 
     Ok(flight_plan)
 }
 
-pub async fn create_purchase_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
-    let purchase_order = client.create_purchase_order(ship_id.to_string(), good, quantity).await?;
+pub async fn create_purchase_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> anyhow::Result<responses::PurchaseOrder> {
+    if quantity > 0 {
+        let purchase_order = client.create_purchase_order(ship_id.to_string(), good, quantity).await?;
 
-    db::persist_transaction(pg_pool.clone(), "purchase", user_id, &purchase_order).await?;
+        db::persist_transaction(pg_pool.clone(), "purchase", user_id, &purchase_order).await?;
 
-    Ok(purchase_order)
+        Ok(purchase_order)
+    } else {
+        Err(anyhow!("Refusing to try and create a purchase order with zero quantity"))
+    }
 }
 
-pub async fn create_sell_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> Result<responses::PurchaseOrder, Box<dyn std::error::Error>> {
-    let sell_order = client.create_sell_order(ship_id.to_string(), good, quantity).await?;
+pub async fn create_sell_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> anyhow::Result<responses::PurchaseOrder> {
+    if quantity > 0 {
+        let sell_order = client.create_sell_order(ship_id.to_string(), good, quantity).await?;
 
-    db::persist_transaction(pg_pool.clone(), "sell", user_id, &sell_order).await?;
+        db::persist_transaction(pg_pool.clone(), "sell", user_id, &sell_order).await?;
 
-    Ok(sell_order)
+        Ok(sell_order)
+    } else {
+        Err(anyhow!("Refusing to try and create a sell order with zero quantity"))
+    }
 }
 
-pub async fn get_fuel_required_for_trip(pg_pool: PgPool, origin: &str, destination: &str, ship_type: &str) -> Result<f64, Box<dyn std::error::Error>> {
+pub async fn get_fuel_required_for_trip(pg_pool: PgPool, origin: &str, destination: &str, ship_type: &str) -> anyhow::Result<f64> {
     let distance_between = db::get_distance_between_locations(pg_pool, origin, destination).await?;
 
     // https://discord.com/channels/792864705139048469/792864705139048472/839919413742272572
@@ -61,7 +70,7 @@ pub async fn get_fuel_required_for_trip(pg_pool: PgPool, origin: &str, destinati
     Ok(fuel_required + ship_fuel_penalty)
 }
 
-pub async fn get_routes_for_ship(pg_pool: PgPool, ship: &shared::Ship) -> Result<Vec<DbRoute>, Box<dyn std::error::Error>> {
+pub async fn get_routes_for_ship(pg_pool: PgPool, ship: &shared::Ship) -> anyhow::Result<Vec<DbRoute>> {
     // TODO: Getting the best route only from the location that the ship currently is in locks
     //       the ship into trade loops. It might be better to search the entire system for the
     //       best route and then find the best trade to that location before beginning a trade

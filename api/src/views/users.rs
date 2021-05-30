@@ -74,22 +74,34 @@ pub async fn user_stats(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
     }
 
     let user_stats = sqlx::query("
-        SELECT DISTINCT ON (CAST (extract(epoch from date_trunc('second', dus.created_at)) AS integer) / 120) created_at,
-             user_id::text
-            ,credits
-            ,ship_count
-            ,created_at
-        FROM daemon_user_stats dus
-        WHERE dus.created_at > (now() - '7 days'::interval)
-        AND user_id = $1::uuid
-        ORDER BY
-            CAST (extract(epoch from date_trunc('second', dus.created_at)) AS integer) / 120 ASC,
-            dus.created_at ASC
+        ;WITH time_group AS (
+            SELECT
+                 row_number() over (order by series) as id
+                ,series as end_date
+                ,series - '15 minutes'::interval as start_date
+            FROM generate_series(
+                date_trunc('hour', NOW() - '7 days'::interval) + '1 hour'::interval,
+                date_trunc('hour', NOW()) + '1 hour',
+                '15 minutes'::interval
+                ) as series
+        )
+        SELECT
+             tg.id
+            ,COALESCE(MAX(dus.credits), 0) as credits
+            ,COALESCE(MAX(dus.ship_count), 0) as ship_count
+            ,MAX(tg.end_date) as created_at
+        FROM time_group tg
+        INNER JOIN daemon_user_stats dus
+            ON dus.created_at >= tg.start_date
+            AND dus.created_at < tg.end_date
+            AND dus.user_id = $1::uuid
+        GROUP BY tg.id
+        ORDER BY tg.id;
     ")
         .bind(user_id.as_str())
         .map(|row: PgRow| {
             UserStats {
-                user_id: row.get("user_id"),
+                user_id: user_id.as_str().to_string(),
                 credits: row.get("credits"),
                 ship_count: row.get("ship_count"),
                 created_at: row.get("created_at"),
