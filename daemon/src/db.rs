@@ -510,7 +510,7 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, sh
     Ok(routes)
 }
 
-pub async fn persist_user_stats(pg_pool: PgPool, user_id: &str, credits: i32, ships: &Vec<shared::Ship>) -> anyhow::Result<()> {
+pub async fn persist_user_stats(pg_pool: PgPool, user_id: &str, credits: i32, ships: &[shared::Ship]) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_user_stats (user_id, credits, ship_count, ships) VALUES ($1::uuid, $2, $3, $4::json);
     ")

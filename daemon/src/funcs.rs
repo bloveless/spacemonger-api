@@ -2,12 +2,11 @@ use anyhow::anyhow;
 use spacetraders::client::{self, HttpClient, Client};
 use spacetraders::errors::SpaceTradersClientError;
 use sqlx::PgPool;
-use spacetraders::{responses, shared};
+use spacetraders::responses;
 use crate::db;
 use spacetraders::shared::Good;
 use crate::db::DbRoute;
 use regex::Regex;
-use chrono::format::Pad::Space;
 
 pub async fn is_api_in_maintenance_mode(http_client: HttpClient) -> bool {
     let game_status = client::get_game_status(http_client.clone()).await;

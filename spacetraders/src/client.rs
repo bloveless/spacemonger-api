@@ -598,6 +598,25 @@ impl Client {
         parse_response::<responses::MyShips>(&response.response_text)
     }
 
+    /// Jettison cargo from a ship
+    pub async fn jettison_cargo(&self, ship_id: String, good: shared::Good, quantity: i32) -> Result<responses::JettisonCargo, SpaceTradersClientError> {
+        let jettison_cargo_request = requests::JettisonCargo {
+            good,
+            quantity,
+        };
+
+        let http_client = self.http_client.lock().await;
+        let response = http_client.execute_request(
+            "POST",
+            &format!("https://api.spacetraders.io/my/ships/{}/jettison", ship_id),
+            Some(&serde_json::to_string(&jettison_cargo_request).unwrap()),
+            Some(&self.token),
+        )
+            .await?;
+
+        parse_response::<responses::JettisonCargo>(&response.response_text)
+    }
+
     // TODO: Jettison cargo
     // TODO: Scrap your ship for credits
     // TODO: Transfer cargo between ships

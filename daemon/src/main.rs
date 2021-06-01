@@ -199,17 +199,31 @@ async fn main() -> anyhow::Result<()> {
                                     SpaceTradersClientError::ServiceUnavailable => {
                                         kill_switch_tx.send(true).expect("Unable to send kill switch");
                                         panic!("Caught a service unavailable error. Sending kill switch and restarting the pod");
-                                    }
+                                    },
                                     SpaceTradersClientError::Unauthorized => {
                                         kill_switch_tx.send(true).expect("Unable to send kill switch");
                                         panic!("Api returned Unauthorized response. Sending kill switch and restarting the pod");
-                                    }
+                                    },
+                                    SpaceTradersClientError::ApiError(e) => {
+                                        // If we received an Api error lets pessimistically reset
+                                        // the machine so we don't have to worry about machines
+                                        // getting stuck. Later we might check an error code before
+                                        // we do this. I.E. {"error":{"message":"Good is not listed in planet marketplace.","code":2001}}
+                                        // is the one I'm currently targeting
+                                        log::error!("{}:{} -- Caught Api error {}. Resetting machine", user.username, machine.get_ship_id(), e);
+                                        match machine.reset().await {
+                                            Ok(_) => log::info!("{}:{} -- Was reset", user.username, machine.get_ship_id()),
+                                            Err(e) => log::error!("{}:{} -- Was unable to be reset: {}", user.username, machine.get_ship_id(), e),
+                                        };
+                                    },
                                     // NOTE: All other errors we are just going to skip because the state machine
                                     //       will just try it again... which is fine
                                     // SpaceTradersClientError::Http(_) => {}
                                     // SpaceTradersClientError::ApiError(_) => {}
                                     // SpaceTradersClientError::TooManyRetries => {}
                                     // SpaceTradersClientError::JsonParse(_) => {}
+                                    // TODO: Try resetting the machine if we get an unexpected
+                                    // error
                                     other_error => {
                                         log::error!("Caught a space traders client. Error: {}", other_error);
                                     }

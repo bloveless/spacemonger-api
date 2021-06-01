@@ -251,3 +251,17 @@ pub struct PurchaseShip {
     /// The current data about the ship that was purchased
     pub ship: shared::Ship,
 }
+
+/// The representation of a jettison cargo response
+#[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
+pub struct JettisonCargo {
+    /// The id of the ship that cargo was jettisoned from
+    #[serde(rename = "ship_id")]
+    pub ship_id: String,
+    /// The good which was jettisoned
+    pub good: shared::Good,
+    /// The quantity remaining of the good which was jettisoned
+    #[serde(rename = "quantityRemaining")]
+    pub quantity_remaining: i32,
+}

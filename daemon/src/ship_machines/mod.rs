@@ -32,6 +32,20 @@ impl ShipMachine {
             ShipMachine::Scout(scout) => scout.poll().await,
         }
     }
+
+    pub fn get_ship_id(&self) -> String {
+        match self {
+            ShipMachine::Trader(trader) => trader.get_ship_id(),
+            ShipMachine::Scout(scout) => scout.get_ship_id(),
+        }
+    }
+
+    pub async fn reset(&mut self) -> anyhow::Result<()> {
+        match self {
+            ShipMachine::Trader(trader) => trader.reset().await,
+            ShipMachine::Scout(scout) => scout.reset().await,
+        }
+    }
 }
 
 pub fn new_trader_machine(client: Client, pg_pool: PgPool, username: String, user_id: String, ship: shared::Ship) -> ShipMachine {

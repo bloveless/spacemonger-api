@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, Responder, get, HttpRequest};
+use actix_web::{web, HttpResponse, Responder, get};
 use sqlx::{PgPool, Row, Error};
 use sqlx::postgres::PgRow;
 use crate::models::{User, UserStats, UserStatsResponse};

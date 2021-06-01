@@ -53,3 +53,13 @@ pub struct SellOrderRequest {
     /// The quantity of good to sell
     pub quantity: i32,
 }
+
+/// The representation of a jettison cargo request
+#[derive(Serialize, Debug)]
+pub struct JettisonCargo {
+    /// The good to be jettisoned
+    pub good: shared::Good,
+    /// The quantity of good to jettison
+    pub quantity: i32,
+}
+

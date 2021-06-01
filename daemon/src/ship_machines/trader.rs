@@ -50,6 +50,25 @@ impl Trader {
         }
     }
 
+    pub fn get_ship_id(&self) -> String {
+        self.ship.id.clone()
+    }
+
+    pub async fn reset(&mut self) -> anyhow::Result<()> {
+        log::info!("{}:{} -- Ship is being reset", self.username, self.ship.id);
+
+        // First we will abandon all cargo
+        for cargo in &self.ship.cargo {
+            self.client.jettison_cargo(self.ship.id.clone(), cargo.good, cargo.quantity).await?;
+        }
+
+        // Next we will re-initialize the ship which will wait for the ship to arrive and restart
+        // it's loop
+        self.state = TraderState::InitializeShip;
+
+        Ok(())
+    }
+
     pub async fn poll(&mut self) -> anyhow::Result<Option<PollResult>> {
         match self.state {
             TraderState::InitializeShip => {
