@@ -112,15 +112,15 @@ impl User {
                 self.client.clone(),
                 self.pg_pool.clone(),
                 self.username.clone(),
-                ship.id.clone(),
                 self.id.clone(),
+                ship.clone(),
             ),
             ShipAssignment::Scout { system_symbol, location_symbol } => new_scout_machine(
                 self.client.clone(),
                 self.pg_pool.clone(),
                 self.username.clone(),
-                ship.id.clone(),
                 self.id.clone(),
+                ship.clone(),
                 system_symbol.to_owned(),
                 location_symbol.to_owned()
             )

@@ -42,7 +42,7 @@
 ## Use the system log instead of Tor's logfiles
 Log notice syslog
 ## To send all messages to stderr:
-Log debug stderr
+# Log debug stderr
 
 ## The directory for keeping all the keys/etc. By default, we store
 ## things in $HOME/.tor on Unix, and in Application Data\tor on Windows.
@@ -247,4 +247,4 @@ DataDirectory /var/lib/tor
 ## The %include option can be used recursively.
 #%include /etc/torrc.d/*.conf
 
-HTTPTunnelPort 9080
+HTTPTunnelPort 0.0.0.0:9080

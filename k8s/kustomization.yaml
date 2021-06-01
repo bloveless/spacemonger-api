@@ -3,6 +3,16 @@ namespace: spacemonger
 commonLabels:
   app: spacemonger
 
+images:
+  - name: bloveless/spacemongerd
+    newTag: 0.1.0-alpha.75
+  - name: bloveless/tor
+    newTag: 0.1.0-alpha.4
+  - name: bloveless/spacemonger-api
+    newTag: 0.1.0-alpha.17
+  - name: bloveless/spacemonger-ui
+    newTag: 0.1.0-alpha.8
+
 resources:
 - namespace.yaml
 - secrets.yaml

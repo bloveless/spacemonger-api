@@ -34,5 +34,12 @@ services:
       - pg_data:/var/lib/postgresql/data
       - ./docker/postgres/initdb.d:/docker-entrypoint-initdb.d
 
+  tor:
+    build:
+      context: .
+      dockerfile: docker/tor/Dockerfile
+    ports:
+      - 9080:9080
+
 volumes:
   pg_data:

@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: spacemongerd-trader
-        image: bloveless/spacemongerd:0.1.0-alpha.74
+        image: bloveless/spacemongerd
         command: ["/app/spacemongerd"]
         envFrom:
         - secretRef:
@@ -45,7 +45,7 @@ spec:
         - name: RUST_LOG
           value: spacemongerd=debug,spacetraders=info
       - name: spacemongerd-scouts
-        image: bloveless/spacemongerd:0.1.0-alpha.74
+        image: bloveless/spacemongerd
         command: ["/app/spacemongerd"]
         envFrom:
           - secretRef:
@@ -72,7 +72,7 @@ spec:
           - name: HTTP_PROXY
             value: 127.0.0.1:9080
       - name: tor
-        image: bloveless/tor:0.1.0-alpha.4
+        image: bloveless/tor
         ports:
           - containerPort: 9080
       restartPolicy: Always
@@ -99,7 +99,7 @@ spec:
     spec:
       containers:
         - name: spacemonger-api
-          image: bloveless/spacemonger-api:0.1.0-alpha.17
+          image: bloveless/spacemonger-api
           command: ["/app/spacemonger-api"]
           envFrom:
             - secretRef:
@@ -139,5 +139,5 @@ spec:
     spec:
       containers:
         - name: spacemonger-ui
-          image: bloveless/spacemonger-ui:0.1.0-alpha.8
+          image: bloveless/spacemonger-ui
       restartPolicy: Always

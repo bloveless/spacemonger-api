@@ -239,7 +239,7 @@ pub async fn persist_flight_plan(pg_pool: PgPool, user_id: &str, ship_id: &str, 
             ,fuel_remaining
             ,time_remaining_in_seconds
             ,arrives_at
-        ) VALUES ($1, uuid($2), $3, $4, $5, $6, $7, $8, $9, $10);
+        ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10);
     ")
         .bind(&flight_plan.flight_plan.id)
         .bind(&user_id)
@@ -376,7 +376,7 @@ pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketp
     Ok(())
 }
 
-pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> anyhow::Result<Vec<DbRoute>> {
+pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, ship_speed: i32) -> anyhow::Result<Vec<DbRoute>> {
     let mut transaction = pg_pool.begin().await.unwrap();
 
     sqlx::query("DROP TABLE IF EXISTS tmp_latest_location_goods;")
@@ -466,7 +466,7 @@ pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> a
             AND llg1.good_symbol = llg2.good_symbol
             AND llg1.location_symbol != llg2.location_symbol
     ")
-        .bind(ship.location.clone().unwrap())
+        .bind(location_symbol)
         .map(|row: PgRow| {
             let distance: f64 = row.get("distance");
             let location_type: String = row.get("purchase_location_type");
@@ -477,11 +477,11 @@ pub async fn get_routes_from_location(pg_pool: PgPool, ship: &shared::Ship) -> a
             let planet_penalty = if location_type == "Planet" { 2.0 } else { 0.0 };
             let fuel_required: f64 = (distance.round() / 4.0).round() + planet_penalty + 1.0;
 
-            let flight_time = (distance * (2.0 / f64::from(ship.speed)).round()) + 60.0;
+            let flight_time = (distance * (2.0 / f64::from(ship_speed)).round()) + 60.0;
 
             let profit = f64::from(sell_price_per_unit - purchase_price_per_unit);
             let cost_volume_distance = profit / f64::from(volume_per_unit) / distance;
-            let profit_speed_volume_distance = (profit * f64::from(ship.speed)) / (f64::from(volume_per_unit) * distance);
+            let profit_speed_volume_distance = (profit * f64::from(ship_speed)) / (f64::from(volume_per_unit) * distance);
 
             DbRoute {
                 purchase_location_symbol: row.get("purchase_location_symbol"),
@@ -658,4 +658,26 @@ pub async fn persist_transaction(pg_pool: PgPool, transaction_type: &str, user_i
         .await?;
 
     Ok(())
+}
+
+pub async fn get_fuel_required(pg_pool: PgPool, origin: &str, destination: &str, ship_type: &str) -> anyhow::Result<Option<i32>> {
+    Ok(sqlx::query("
+        SELECT fuel_consumed
+        FROM daemon_flight_plan dfp
+        INNER JOIN daemon_user_ship dus
+            ON dus.ship_id = dfp.ship_id
+        WHERE dfp.origin = $1
+            AND dfp.destination = $2
+            AND dus.type = $3
+        LIMIT 1
+    ")
+        .bind(origin)
+        .bind(destination)
+        .bind(ship_type)
+        .map(|row: PgRow| {
+            row.get("fuel_consumed")
+        })
+        .fetch_optional(&pg_pool)
+        .await?
+    )
 }

@@ -6,6 +6,7 @@ use sqlx::PgPool;
 use std::fmt::Debug;
 use crate::ship_machines::trader::Trader;
 use crate::ship_machines::scout::Scout;
+use spacetraders::shared;
 
 #[derive(Debug, Clone)]
 pub enum PollResult {
@@ -33,23 +34,23 @@ impl ShipMachine {
     }
 }
 
-pub fn new_trader_machine(client: Client, pg_pool: PgPool, username: String, ship_id: String, user_id: String) -> ShipMachine {
+pub fn new_trader_machine(client: Client, pg_pool: PgPool, username: String, user_id: String, ship: shared::Ship) -> ShipMachine {
     ShipMachine::Trader(Trader::new(
         client,
         pg_pool,
         user_id,
         username,
-        ship_id,
+        ship,
     ))
 }
 
-pub fn new_scout_machine(client: Client, pg_pool: PgPool, username: String, ship_id: String, user_id: String, system_symbol: String, location_symbol: String) -> ShipMachine {
+pub fn new_scout_machine(client: Client, pg_pool: PgPool, username: String, user_id: String, ship: shared::Ship, system_symbol: String, location_symbol: String) -> ShipMachine {
     ShipMachine::Scout(Scout::new(
         client,
         pg_pool,
         user_id,
         username,
-        ship_id,
+        ship,
         system_symbol,
         location_symbol,
     ))

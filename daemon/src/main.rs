@@ -168,8 +168,13 @@ async fn main() -> anyhow::Result<()> {
             let mut prev_user_credits = 0;
             loop {
                 if let Ok(value) = kill_switch_rx.try_recv() {
-                    log::info!("Received kill switch value {}", value);
-                    panic!("Received kill switch. Terminating thread");
+                    log::error!("Received kill switch value {}", value);
+                    return;
+                }
+
+                if user.ship_machines.is_empty() {
+                    log::error!("User {} has no ships and therefore cannot make progress. Quitting this user", user.username);
+                    return;
                 }
 
                 for machine in &mut user.ship_machines {
@@ -209,6 +214,8 @@ async fn main() -> anyhow::Result<()> {
                                         log::error!("Caught a space traders client. Error: {}", other_error);
                                     }
                                 }
+                            } else {
+                                panic!("Caught unexpected error: {:?}", e);
                             }
                         }
                     }
