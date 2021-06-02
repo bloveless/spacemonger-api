@@ -209,6 +209,7 @@ async fn main() -> anyhow::Result<()> {
                                         // the machine so we don't have to worry about machines
                                         // getting stuck. Later we might check an error code before
                                         // we do this. I.E. {"error":{"message":"Good is not listed in planet marketplace.","code":2001}}
+                                        // {"error":{"message":"Good quantity is not available on planet.","code":2006}}
                                         // is the one I'm currently targeting
                                         log::error!("{}:{} -- Caught Api error {}. Resetting machine", user.username, machine.get_ship_id(), e);
                                         match machine.reset().await {
