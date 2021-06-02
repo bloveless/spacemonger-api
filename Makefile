@@ -1,6 +1,6 @@
 daemon_tag = 0.1.0-alpha.79
 tor_tag = 0.1.0-alpha.4
-api_tag = 0.1.0-alpha.18
+api_tag = 0.1.0-alpha.19
 
 publish-daemon:
 	docker build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:$(daemon_tag) .

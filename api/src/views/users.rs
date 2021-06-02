@@ -137,7 +137,8 @@ pub async fn user_ships(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
             ,modified_at
             ,created_at
         FROM daemon_user_ship dus
-        WHERE dus.user_id = $1::uuid;
+        WHERE dus.user_id = $1::uuid
+        ORDER BY created_at DESC;
     ")
         .bind(user_id.as_str())
         .map(|row: PgRow| {
@@ -183,7 +184,8 @@ pub async fn user_ship_transactions(params: web::Path<(String, String)>, pg_pool
             ,created_at
         FROM daemon_user_transaction dut
         WHERE dut.user_id = $1::uuid
-            AND dut.ship_id = $2;
+            AND dut.ship_id = $2
+        ORDER BY created_at DESC;
     ")
         .bind(user_id.as_str())
         .bind(ship_id.as_str())
