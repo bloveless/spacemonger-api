@@ -14,6 +14,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     // users
     cfg.service(users::users);
     cfg.service(users::user_stats);
+    cfg.service(users::user_ships);
+    cfg.service(users::user_ship_transactions);
 
     // market data
     cfg.service(market_data::latest);

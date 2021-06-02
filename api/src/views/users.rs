@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse, Responder, get};
 use sqlx::{PgPool, Row, Error};
 use sqlx::postgres::PgRow;
-use crate::models::{User, UserStats, UserStatsResponse};
+use crate::models::{User, UserStats, UserStatsResponse, UserShip, UserTransaction};
 
 #[get("/users")]
 pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
@@ -116,6 +116,96 @@ pub async fn user_stats(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
                 username: username.unwrap(),
                 stats: user_stats,
             })
+        },
+        _ => HttpResponse::BadRequest().body("Error trying to get user stats"),
+    }
+}
+
+#[get("/users/{user_id}/ships")]
+pub async fn user_ships(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) -> impl Responder {
+    let ships = sqlx::query("
+        SELECT
+             user_id::text
+            ,ship_id
+            ,type
+            ,class
+            ,max_cargo
+            ,speed
+            ,manufacturer
+            ,plating
+            ,weapons
+            ,modified_at
+            ,created_at
+        FROM daemon_user_ship dus
+        WHERE dus.user_id = $1::uuid;
+    ")
+        .bind(user_id.as_str())
+        .map(|row: PgRow| {
+            UserShip {
+                user_id: row.get("user_id"),
+                ship_id: row.get("ship_id"),
+                ship_type: row.get("type"),
+                class: row.get("class"),
+                max_cargo: row.get("max_cargo"),
+                speed: row.get("speed"),
+                manufacturer: row.get("manufacturer"),
+                plating: row.get("plating"),
+                weapons: row.get("weapons"),
+                modified_at: row.get("modified_at"),
+                created_at: row.get("created_at"),
+            }
+        })
+        .fetch_all(pg_pool.as_ref())
+        .await;
+
+    match ships {
+        Ok(ships) => {
+            HttpResponse::Ok().json(ships)
+        },
+        _ => HttpResponse::BadRequest().body("Error trying to get user stats"),
+    }
+}
+
+#[get("/users/{user_id}/ships/{ship_id}/transactions")]
+pub async fn user_ship_transactions(params: web::Path<(String, String)>, pg_pool: web::Data<PgPool>) -> impl Responder {
+    let (user_id, ship_id) = params.into_inner();
+
+    let ship_transactions = sqlx::query("
+        SELECT
+             user_id::text
+            ,ship_id
+            ,type
+            ,good_symbol
+            ,price_per_unit
+            ,quantity
+            ,total
+            ,location_symbol
+            ,created_at
+        FROM daemon_user_transaction dut
+        WHERE dut.user_id = $1::uuid
+            AND dut.ship_id = $2;
+    ")
+        .bind(user_id.as_str())
+        .bind(ship_id.as_str())
+        .map(|row: PgRow| {
+            UserTransaction {
+                user_id: row.get("user_id"),
+                ship_id: row.get("ship_id"),
+                transaction_type: row.get("type"),
+                good_symbol: row.get("good_symbol"),
+                price_per_unit: row.get("price_per_unit"),
+                quantity: row.get("quantity"),
+                total: row.get("total"),
+                location_symbol: row.get("location_symbol"),
+                created_at: row.get("created_at"),
+            }
+        })
+        .fetch_all(pg_pool.as_ref())
+        .await;
+
+    match ship_transactions {
+        Ok(ship_transactions) => {
+            HttpResponse::Ok().json(ship_transactions)
         },
         _ => HttpResponse::BadRequest().body("Error trying to get user stats"),
     }

@@ -43,6 +43,34 @@ pub struct UserStatsResponse {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct UserShip {
+    pub user_id: String,
+    pub ship_id: String,
+    pub ship_type: String,
+    pub class: String,
+    pub max_cargo: i32,
+    pub speed: i32,
+    pub manufacturer: String,
+    pub plating: i32,
+    pub weapons: i32,
+    pub modified_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UserTransaction {
+    pub user_id: String,
+    pub ship_id: String,
+    pub transaction_type: String,
+    pub good_symbol: String,
+    pub price_per_unit: i32,
+    pub quantity: i32,
+    pub total: i32,
+    pub location_symbol: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct SystemInfo {
     pub system_symbol: String,
     pub system_name: String,
