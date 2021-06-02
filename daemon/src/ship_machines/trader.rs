@@ -16,7 +16,6 @@ enum TraderState {
     PickBestTrade,
     // MoveToLocation,
     ExecuteTrade,
-    // SellAllCargo,
     // PurchaseMaxGoodForTrading,
     MoveToRandomLocation,
     // PickRandomLocation,
@@ -57,10 +56,15 @@ impl Trader {
     pub async fn reset(&mut self) -> anyhow::Result<()> {
         log::info!("{}:{} -- Ship is being reset", self.username, self.ship.id);
 
-        // First we will abandon all cargo
+        let ship = self.client.get_my_ship(&self.ship.id).await?;
+        self.ship = ship.ship;
+
+        // First we will jettison all cargo
         for cargo in &self.ship.cargo {
             self.client.jettison_cargo(self.ship.id.clone(), cargo.good, cargo.quantity).await?;
         }
+
+        self.ship.cargo.clear();
 
         // Next we will re-initialize the ship which will wait for the ship to arrive and restart
         // it's loop
@@ -79,7 +83,7 @@ impl Trader {
                     let flight_plan = db::get_active_flight_plan(self.pg_pool.clone(), &self.ship.id)
                         .await.expect("Unable to find flight plan for a ship that is in motion").unwrap();
 
-                    log::info!("{} -- Ship is moving to {}. Waiting for arrival", self.username, flight_plan.destination);
+                    log::info!("{}:{} -- Ship is moving to {}. Waiting for arrival", self.username, self.ship.id, flight_plan.destination);
                     self.arrival_time = flight_plan.arrives_at;
                     self.flight_plan = Some(flight_plan);
                     self.state = TraderState::WaitForArrival;
@@ -87,9 +91,8 @@ impl Trader {
                     let mut new_user_credits = 0;
                     for cargo in self.ship.cargo.clone() {
                         if cargo.quantity > 0 {
-                            log::info!("{} -- Selling {} goods {} at {}", self.username, cargo.quantity, cargo.good, self.ship.location.clone().unwrap());
-                            let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &self.user_id, &self.ship.id, cargo.good, cargo.quantity).await?;
-                            self.ship = sell_order.ship;
+                            log::info!("{}:{} -- Selling {} goods {} at {}", self.username, self.ship.id, cargo.quantity, cargo.good, self.ship.location.clone().unwrap());
+                            let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &self.user_id, cargo.good, cargo.quantity, &mut self.ship).await?;
                             new_user_credits = sell_order.credits;
                         }
                     }
@@ -105,7 +108,7 @@ impl Trader {
                 log::trace!("{}:{} -- TraderState::WaitForArrival", self.username, self.ship.id);
                 // We have arrived
                 if Utc::now().ge(&self.arrival_time) {
-                    log::info!("{} -- Ship traveling to {} has arrived", self.username, self.flight_plan.clone().unwrap().destination);
+                    log::info!("{}:{} -- Ship traveling to {} has arrived", self.username, self.ship.id, self.flight_plan.clone().unwrap().destination);
                     self.ship.location = Some(self.flight_plan.clone().unwrap().destination);
                     self.state = TraderState::PickBestTrade;
                 }
@@ -114,7 +117,7 @@ impl Trader {
                 log::trace!("{}:{} -- TraderState::MoveToRandomLocation", self.username, self.ship.id);
 
                 if self.ship.location.is_none() {
-                    log::warn!("{} -- We can't pick a random location while a ship is in motion... trying again later", self.username);
+                    log::warn!("{}:{} -- We can't pick a random location while a ship is in motion... trying again later", self.username, self.ship.id);
                     return Ok(None);
                 }
 
@@ -122,7 +125,7 @@ impl Trader {
 
                 let locations = db::get_system_locations_from_location(self.pg_pool.clone(), &current_ship_location).await?;
 
-                log::debug!("{} -- Found locations in system to randomly pick from {:?}", self.username, locations);
+                log::debug!("{}:{} -- Found locations in system to randomly pick from {:?}", self.username, self.ship.id, locations);
 
                 let new_location = locations.choose(&mut rand::thread_rng());
 
@@ -130,11 +133,11 @@ impl Trader {
                     Some(location) => {
                         // Don't try and send a ship to it's current location
                         if *location == current_ship_location {
-                            log::debug!("{} -- Tried to send ship to it's current location... picking another location", self.username);
+                            log::debug!("{}:{} -- Tried to send ship to it's current location... picking another location", self.username, self.ship.id);
                             return Ok(None);
                         }
 
-                        log::info!("{} -- Randomly picked {} to start trading at", self.username, location);
+                        log::info!("{}:{} -- Randomly picked {} to start trading at", self.username, self.ship.id, location);
 
                         let current_fuel = self.ship.cargo.clone().into_iter()
                             .filter(|c| c.good == Good::Fuel)
@@ -152,40 +155,32 @@ impl Trader {
 
                         let mut new_user_credits = 0;
                         if additional_fuel_required > 0 {
-                            log::info!("{} -- Ship destined to {} is filling up with {} additional fuel", self.username, location, additional_fuel_required);
+                            log::info!("{}:{} -- Ship destined to {} is filling up with {} additional fuel", self.username, self.ship.id, location, additional_fuel_required);
                             let purchase_order = funcs::create_purchase_order(
                                 self.client.clone(),
                                 self.pg_pool.clone(),
                                 &self.user_id,
-                                &self.ship.id,
                                 Good::Fuel,
                                 // Don't ever try and buy more fuel than the ship can hold
                                 min(additional_fuel_required, self.ship.space_available),
+                                &mut self.ship,
                             ).await?;
 
                             new_user_credits = purchase_order.credits;
-                            self.ship = purchase_order.ship;
                         }
 
-                        log::info!("{} -- Ship destined to {} is creating a flight plan", self.username, location);
+                        log::info!("{}:{} -- Ship destined to {} is creating a flight plan", self.username, self.ship.id, location);
                         let flight_plan = funcs::create_flight_plan(
                             self.client.clone(),
                             self.pg_pool.clone(),
                             &self.user_id,
-                            &self.ship.id,
                             &location,
+                            &mut self.ship
                         ).await?;
-                        self.ship.location = None;
+
                         self.flight_plan = Some(flight_plan.flight_plan.clone());
-                        self.ship.cargo = self.ship.cargo.clone().into_iter().map(|mut c| {
-                            if c.good == Good::Fuel {
-                                c.quantity -= flight_plan.flight_plan.fuel_consumed;
-                            }
 
-                            c
-                        }).collect();
-
-                        log::info!("{} -- Ship destined to {} is scheduled for arrival at {}", self.username, location, flight_plan.flight_plan.arrives_at);
+                        log::info!("{}:{} -- Ship destined to {} is scheduled for arrival at {}", self.username, self.ship.id, location, flight_plan.flight_plan.arrives_at);
                         self.arrival_time = flight_plan.flight_plan.arrives_at;
                         self.flight_plan = Some(flight_plan.flight_plan);
                         self.state = TraderState::WaitForArrival;
@@ -195,12 +190,21 @@ impl Trader {
                         }
                     }
                     None => {
-                        log::error!("{} -- Unable to find a new random location to move to... trying again", self.username);
+                        log::error!("{}:{} -- Unable to find a new random location to move to... trying again", self.username, self.ship.id);
                     }
                 }
             },
             TraderState::PickBestTrade => {
                 log::trace!("{}:{} -- TraderState::PickBestTrade", self.username, self.ship.id);
+
+                let mut new_user_credits = 0;
+                for cargo in self.ship.cargo.clone() {
+                    if cargo.quantity > 0 {
+                        log::info!("{}:{} -- Selling {} goods {} at {}", self.username, self.ship.id, cargo.quantity, cargo.good, self.ship.location.clone().unwrap());
+                        let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &self.user_id, cargo.good, cargo.quantity, &mut self.ship).await?;
+                        new_user_credits = sell_order.credits;
+                    }
+                }
 
                 let origin = self.ship.location.clone().unwrap();
 
@@ -210,11 +214,11 @@ impl Trader {
                         self.ship.speed
                 ).await?;
 
-                log::debug!("{} -- Routes: {:?}", self.username, routes);
+                log::debug!("{}:{} -- Routes: {:?}", self.username, self.ship.id, routes);
 
                 for route in routes {
                     if route.sell_location_symbol != "OE-XV-91-2" && route.purchase_quantity > 500 && route.profit_speed_volume_distance > 0.0 {
-                        log::info!("{} -- Trading {} from {} to {} (purchase quantity {}, sell quantity {})", self.username, route.good, route.purchase_location_symbol, route.sell_location_symbol, route.purchase_quantity, route.sell_quantity);
+                        log::info!("{}:{} -- Trading {} from {} to {} (purchase quantity {}, sell quantity {})", self.username, self.ship.id, route.good, route.purchase_location_symbol, route.sell_location_symbol, route.purchase_quantity, route.sell_quantity);
 
                         self.route = Some(route);
                         self.state = TraderState::ExecuteTrade;
@@ -223,8 +227,12 @@ impl Trader {
                     }
                 }
 
-                log::warn!("{} -- Found no available routes from {}. Randomly picking a new location to move to in this system", self.username, origin);
+                log::warn!("{}:{} -- Found no available routes from {}. Randomly picking a new location to move to in this system", self.username, self.ship.id, origin);
                 self.state = TraderState::MoveToRandomLocation;
+
+                if new_user_credits > 0 {
+                    return Ok(Some(PollResult::UpdateCredits(new_user_credits)));
+                }
             },
             TraderState::ExecuteTrade => {
                 log::trace!("{}:{} -- TraderState::Execute", self.username, self.ship.id);
@@ -238,24 +246,6 @@ impl Trader {
                 // After we arrive at a location
                 let route = self.route.clone().unwrap();
 
-                // Just a safe-guard at the cost of an extra API call to make sure that we have the
-                // most current cargo manifest for the ship.
-                // TODO: Ideally we wouldn't need this here but the fuel we used to get here
-                //       has changed the cargo and we don't have that change yet.
-                let ship = self.client.get_my_ship(&self.ship.id).await?;
-                self.ship = ship.ship;
-
-                // sell everything (we can't omit fuel here because sometimes the best trade is fuel)
-                let mut new_user_credits = 0;
-                for cargo in self.ship.cargo.clone() {
-                    if cargo.quantity > 0 {
-                        log::info!("{} -- Selling {} goods {} at {}", self.username, cargo.quantity, cargo.good, self.ship.location.clone().unwrap());
-                        let sell_order = funcs::create_sell_order(self.client.clone(), self.pg_pool.clone(), &self.user_id, &self.ship.id, cargo.good, cargo.quantity).await?;
-                        self.ship = sell_order.ship;
-                        new_user_credits = sell_order.credits;
-                    }
-                }
-
                 let current_fuel = self.ship.cargo.clone().into_iter().filter(|c| c.good == Good::Fuel).fold(0, |acc, c| acc + c.quantity);
 
                 let additional_fuel_required = funcs::get_additional_fuel_required_for_trip(
@@ -268,25 +258,29 @@ impl Trader {
                     &route.sell_location_symbol,
                 ).await?;
 
+                let mut new_user_credits = 0;
                 if additional_fuel_required > 0 {
-                    log::info!("{} -- Ship destined to {} is filling up with {} additional fuel", self.username, route.sell_location_symbol, additional_fuel_required);
+                    log::info!("{}:{} -- Ship destined to {} is filling up with {} additional fuel", self.username, self.ship.id, route.sell_location_symbol, additional_fuel_required);
                     let purchase_order = funcs::create_purchase_order(
                         self.client.clone(),
                         self.pg_pool.clone(),
                         &self.user_id,
-                        &self.ship.id,
                         Good::Fuel,
                         // Don't ever try and buy more fuel than the ship can hold
                         min(additional_fuel_required, self.ship.space_available),
+                        &mut self.ship,
                     ).await?;
 
                     new_user_credits = purchase_order.credits;
                     self.ship = purchase_order.ship;
                 }
 
+                log::debug!("{}:{} -- Current space available {}", self.username, self.ship.id, self.ship.space_available);
+
                 log::info!(
-                    "{} -- Purchasing {} {} for trading (volume per unit {}). Purchase price at {} is {}. Sell price at {} is {}",
+                    "{}:{} -- Purchasing {} {} for trading (volume per unit {}). Purchase price at {} is {}. Sell price at {} is {}",
                     self.username,
+                    self.ship.id,
                     self.ship.space_available / route.good.get_volume(),
                     route.good,
                     route.good.get_volume(),
@@ -300,29 +294,23 @@ impl Trader {
                     self.client.clone(),
                     self.pg_pool.clone(),
                     &self.user_id,
-                    &self.ship.id,
                     route.good,
                     self.ship.space_available / route.good.get_volume(),
+                    &mut self.ship,
                 ).await {
                     Ok(purchase_order) => {
-                        log::info!("{} -- Ship destined to {} is creating a flight plan", self.username, route.sell_location_symbol);
+                        self.ship = purchase_order.ship;
+
+                        log::info!("{}:{} -- Ship destined to {} is creating a flight plan", self.username, self.ship.id, route.sell_location_symbol);
                         let flight_plan = funcs::create_flight_plan(
                             self.client.clone(),
                             self.pg_pool.clone(),
                             &self.user_id,
-                            &self.ship.id,
                             &route.sell_location_symbol,
+                            &mut self.ship,
                         ).await?;
-                        self.ship.location = None;
-                        self.ship.cargo = self.ship.cargo.clone().into_iter().map(|mut c| {
-                            if c.good == Good::Fuel {
-                                c.quantity -= flight_plan.flight_plan.fuel_consumed;
-                            }
 
-                            c
-                        }).collect();
-
-                        log::info!("{} -- Ship destined to {} is scheduled for arrival at {}", self.username, route.sell_location_symbol, flight_plan.flight_plan.arrives_at);
+                        log::info!("{}:{} -- Ship destined to {} is scheduled for arrival at {}", self.username, self.ship.id, route.sell_location_symbol, flight_plan.flight_plan.arrives_at);
                         self.arrival_time = flight_plan.flight_plan.arrives_at;
                         self.flight_plan = Some(flight_plan.flight_plan);
                         self.state = TraderState::WaitForArrival;
@@ -330,10 +318,14 @@ impl Trader {
                         return Ok(Some(PollResult::UpdateCredits(purchase_order.credits)));
                     },
                     Err(e) => {
-                        log::error!("{} -- Unable to create purchase order. Picking a new trade. Error: {}", self.username, e);
+                        log::error!("{}:{} -- Unable to create purchase order. Picking a new trade. Error: {}", self.username, self.ship.id, e);
                         // If there is any error then pick another trade
                         self.state = TraderState::PickBestTrade;
                     }
+                }
+
+                if new_user_credits > 0 {
+                    return Ok(Some(PollResult::UpdateCredits(new_user_credits)));
                 }
             },
         }

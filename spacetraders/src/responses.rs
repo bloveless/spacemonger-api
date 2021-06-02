@@ -257,7 +257,7 @@ pub struct PurchaseShip {
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct JettisonCargo {
     /// The id of the ship that cargo was jettisoned from
-    #[serde(rename = "ship_id")]
+    #[serde(rename = "shipId")]
     pub ship_id: String,
     /// The good which was jettisoned
     pub good: shared::Good,

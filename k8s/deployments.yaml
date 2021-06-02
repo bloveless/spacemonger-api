@@ -27,7 +27,7 @@ spec:
             name: spacemonger
         env:
         - name: USERNAME_BASE
-          value: bloveless1
+          value: bloveless
         - name: POSTGRES_HOST
           value: 192.168.4.252
         - name: POSTGRES_PORT
@@ -52,7 +52,7 @@ spec:
               name: spacemonger
         env:
           - name: USERNAME_BASE
-            value: bloveless1
+            value: bloveless
           - name: POSTGRES_HOST
             value: 192.168.4.252
           - name: POSTGRES_PORT

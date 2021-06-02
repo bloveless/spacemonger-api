@@ -1,4 +1,4 @@
-daemon_tag = 0.1.0-alpha.76
+daemon_tag = 0.1.0-alpha.79
 tor_tag = 0.1.0-alpha.4
 api_tag = 0.1.0-alpha.17
 

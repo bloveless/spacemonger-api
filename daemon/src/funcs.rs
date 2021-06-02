@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use spacetraders::client::{self, HttpClient, Client};
 use spacetraders::errors::SpaceTradersClientError;
 use sqlx::PgPool;
-use spacetraders::responses;
+use spacetraders::{responses, shared};
 use crate::db;
 use spacetraders::shared::Good;
 use crate::db::DbRoute;
@@ -20,17 +20,29 @@ pub async fn is_api_in_maintenance_mode(http_client: HttpClient) -> bool {
     false
 }
 
-pub async fn create_flight_plan(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, destination: &str) -> anyhow::Result<responses::FlightPlan> {
-    let flight_plan = client.create_flight_plan(ship_id.to_string(), destination.to_string()).await?;
+pub async fn create_flight_plan(client: Client, pg_pool: PgPool, user_id: &str, destination: &str, ship: &mut shared::Ship) -> anyhow::Result<responses::FlightPlan> {
+    let flight_plan = client.create_flight_plan(ship.id.clone(), destination.to_string()).await?;
 
-    db::persist_flight_plan(pg_pool, user_id, ship_id, &flight_plan).await?;
+    ship.location = None;
+    ship.cargo = ship.cargo.clone().into_iter().map(|mut c| {
+        if c.good == Good::Fuel {
+            c.quantity -= flight_plan.flight_plan.fuel_consumed;
+        }
+
+        c
+    }).collect();
+
+    db::persist_flight_plan(pg_pool, user_id, &ship.id, &flight_plan).await?;
 
     Ok(flight_plan)
 }
 
-pub async fn create_purchase_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> anyhow::Result<responses::PurchaseOrder> {
+pub async fn create_purchase_order(client: Client, pg_pool: PgPool, user_id: &str, good: Good, quantity: i32, ship: &mut shared::Ship) -> anyhow::Result<responses::PurchaseOrder> {
     if quantity > 0 {
-        let purchase_order = client.create_purchase_order(ship_id.to_string(), good, quantity).await?;
+        let purchase_order = client.create_purchase_order(ship.id.clone(), good, quantity).await?;
+
+        ship.cargo = purchase_order.ship.cargo.clone();
+        ship.space_available = purchase_order.ship.space_available;
 
         db::persist_transaction(pg_pool.clone(), "purchase", user_id, &purchase_order).await?;
 
@@ -40,9 +52,12 @@ pub async fn create_purchase_order(client: Client, pg_pool: PgPool, user_id: &st
     }
 }
 
-pub async fn create_sell_order(client: Client, pg_pool: PgPool, user_id: &str, ship_id: &str, good: Good, quantity: i32) -> anyhow::Result<responses::PurchaseOrder> {
+pub async fn create_sell_order(client: Client, pg_pool: PgPool, user_id: &str, good: Good, quantity: i32, ship: &mut shared::Ship) -> anyhow::Result<responses::PurchaseOrder> {
     if quantity > 0 {
-        let sell_order = client.create_sell_order(ship_id.to_string(), good, quantity).await?;
+        let sell_order = client.create_sell_order(ship.id.to_string(), good, quantity).await?;
+
+        ship.cargo = sell_order.ship.cargo.clone();
+        ship.space_available = sell_order.ship.space_available;
 
         db::persist_transaction(pg_pool.clone(), "sell", user_id, &sell_order).await?;
 

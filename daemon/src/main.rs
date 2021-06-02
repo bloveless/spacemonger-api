@@ -246,7 +246,7 @@ async fn main() -> anyhow::Result<()> {
                     // We want to keep a base amount of 500k but as we get more ships it is more
                     // costly to fill them with goods so we add 75k per ship to make sure we don't
                     // go broke
-                    if user.credits > (500_000 + (user.ship_machines.len() as i32 * 75_000)) && user.ship_machines.len() < 50 {
+                    if user.credits > (user.ship_machines.len() as i32 * 1_000_000) && user.ship_machines.len() < 50 {
                         match user.purchase_largest_ship(None).await {
                             Ok(_) => {}
                             Err(e) => log::error!("{} -- Error occurred while purchasing a ship. Error: {}", user.username, e)
