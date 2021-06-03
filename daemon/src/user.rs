@@ -133,8 +133,9 @@ impl User {
         // Update our info to contain the new data from the loan response
         self.credits = loan_response.credits;
 
-        // TODO: Keep track of loans... maybe
-        // self.info.user.loans.push(loan_response.loan);
+        // Keep track of loans...
+        self.loans.push(loan_response.loan);
+        self.outstanding_loans = self.loans.clone().into_iter().filter(|f| { !f.status.contains("PAID") }).count();
 
         Ok(())
     }
