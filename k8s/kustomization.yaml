@@ -11,7 +11,7 @@ images:
   - name: bloveless/spacemonger-api
     newTag: 0.1.0-alpha.19
   - name: bloveless/spacemonger-ui
-    newTag: 0.1.0-alpha.9
+    newTag: 0.1.0-alpha.11
 
 resources:
 - namespace.yaml
