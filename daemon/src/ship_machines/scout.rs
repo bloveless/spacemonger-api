@@ -24,8 +24,8 @@ pub struct Scout {
     user_id: String,
     username: String,
     ship: shared::Ship,
-    system_symbol: String,
-    location_symbol: String,
+    system: String,
+    location: String,
     state: ScoutState,
     arrival_time: DateTime<Utc>,
     next_harvest_time: DateTime<Utc>,
@@ -33,24 +33,20 @@ pub struct Scout {
 }
 
 impl Scout {
-    pub fn new(client: Client, pg_pool: PgPool, user_id: String, username: String, ship: shared::Ship, system_symbol: String, location_symbol: String) -> Scout {
+    pub fn new(client: Client, pg_pool: PgPool, user_id: String, username: String, system: String, location: String, ship: shared::Ship) -> Scout {
         Scout {
             client,
             pg_pool,
             user_id,
             username,
             ship,
-            system_symbol,
-            location_symbol,
+            system,
+            location,
             state: ScoutState::InitializeShip,
             arrival_time: Utc::now(),
             next_harvest_time: Utc::now(),
             flight_plan: None,
         }
-    }
-
-    pub fn get_ship_id(&self) -> String {
-        self.ship.id.clone()
     }
 
     pub async fn reset(&mut self) -> anyhow::Result<()> {
@@ -61,7 +57,7 @@ impl Scout {
 
         // First we will jettison all cargo
         for cargo in &self.ship.cargo {
-            self.client.jettison_cargo(self.ship.id.clone(), cargo.good, cargo.quantity).await?;
+            self.client.jettison_cargo(&self.ship.id, cargo.good, cargo.quantity).await?;
         }
 
         self.ship.cargo.clear();
@@ -105,26 +101,26 @@ impl Scout {
                 log::trace!("{}:{} -- ScoutState::WaitForArrival", self.username, self.ship.id);
                 // We have arrived
                 if Utc::now().ge(&self.arrival_time) {
-                    log::info!("{}:{} -- Ship traveling to {} has arrived", self.username, self.ship.id, self.location_symbol);
+                    log::info!("{}:{} -- Ship traveling to {} has arrived", self.username, self.ship.id, self.location);
                     self.state = ScoutState::CheckForCorrectLocation;
-                    self.ship.location = Some(self.location_symbol.clone());
+                    self.ship.location = Some(self.location.clone());
                 }
             },
             ScoutState::CheckForCorrectLocation => {
                 log::trace!("{}:{} -- ScoutState::CheckForCorrectLocation", self.username, self.ship.id);
 
-                if self.ship.location == Some(self.location_symbol.clone()) {
-                    log::trace!("{}:{} -- Ship assigned to harvest market data from {} is at the correct location. Begin harvesting", self.username, self.ship.id, self.location_symbol);
+                if self.ship.location == Some(self.location.clone()) {
+                    log::trace!("{}:{} -- Ship assigned to harvest market data from {} is at the correct location. Begin harvesting", self.username, self.ship.id, self.location);
                     self.state = ScoutState::HarvestMarketData;
                 } else {
-                    log::trace!("{}:{} -- Ship destined to {} was as the wrong location. Moving", self.username, self.ship.id, self.location_symbol);
+                    log::trace!("{}:{} -- Ship destined to {} was as the wrong location. Moving", self.username, self.ship.id, self.location);
                     self.state = ScoutState::MoveToLocation;
                 }
             },
             ScoutState::MoveToLocation => {
                 log::trace!("{}:{} -- ScoutState::MoveToLocation", self.username, self.ship.id);
 
-                let current_fuel = self.ship.cargo.clone().into_iter()
+                let current_fuel = self.ship.cargo.iter()
                     .filter(|c| c.good == Good::Fuel)
                     .fold(0, |acc, c| acc + c.quantity);
 
@@ -135,12 +131,12 @@ impl Scout {
                     &self.ship.ship_type,
                     current_fuel,
                     &self.ship.location.clone().unwrap(),
-                    &self.location_symbol,
+                    &self.location,
                 ).await?;
 
                 let mut new_user_credits = 0;
                 if additional_fuel_required > 0 {
-                    log::info!("{}:{} -- Ship destined to {} is filling up with {} additional fuel", self.username, self.ship.id, self.location_symbol, additional_fuel_required);
+                    log::info!("{}:{} -- Ship destined to {} is filling up with {} additional fuel", self.username, self.ship.id, self.location, additional_fuel_required);
                     let purchase_order = funcs::create_purchase_order(
                         self.client.clone(),
                         self.pg_pool.clone(),
@@ -155,17 +151,16 @@ impl Scout {
                     self.ship = purchase_order.ship;
                 }
 
-                log::info!("{}:{} -- Ship destined to {} is creating a flight plan", self.username, self.ship.id, self.location_symbol);
+                log::info!("{}:{} -- Ship destined to {} is creating a flight plan", self.username, self.ship.id, self.location);
                 let flight_plan = funcs::create_flight_plan(
                     self.client.clone(),
                     self.pg_pool.clone(),
                     &self.user_id,
-                    &self.location_symbol,
+                    &self.location,
                     &mut self.ship,
                 ).await?;
-                self.ship.location = None;
 
-                log::info!("{}:{} -- Ship destined to {} is scheduled for arrival at {}", self.username, self.ship.id, self.location_symbol, flight_plan.flight_plan.arrives_at);
+                log::info!("{}:{} -- Ship destined to {} is scheduled for arrival at {}", self.username, self.ship.id, self.location, flight_plan.flight_plan.arrives_at);
                 self.arrival_time = flight_plan.flight_plan.arrives_at;
                 self.state = ScoutState::WaitForArrival;
 
@@ -175,14 +170,14 @@ impl Scout {
             },
             ScoutState::HarvestMarketData => {
                 log::trace!("{}:{} -- ScoutState::HarvestMarketData", self.username, self.ship.id);
-                let marketplace_data = self.client.get_location_marketplace(&self.location_symbol).await?;
+                let marketplace_data = self.client.get_location_marketplace(&self.location).await?;
 
-                log::trace!("{}:{} -- Ship assigned to {} has received marketplace data", self.username, self.ship.id, self.location_symbol);
+                log::trace!("{}:{} -- Ship assigned to {} has received marketplace data", self.username, self.ship.id, self.location);
 
                 for datum in marketplace_data.marketplace {
                     db::persist_market_data(
                         self.pg_pool.clone(),
-                        &self.location_symbol,
+                        &self.location,
                         &datum,
                     )
                         .await.expect("Unable to save market data");
@@ -190,12 +185,12 @@ impl Scout {
 
                 self.state = ScoutState::Wait;
                 self.next_harvest_time = Utc::now() + Duration::minutes(3);
-                log::trace!("{}:{} -- Ship assigned to {} will check market data again at {}", self.username, self.ship.id, self.location_symbol, self.next_harvest_time);
+                log::trace!("{}:{} -- Ship assigned to {} will check market data again at {}", self.username, self.ship.id, self.location, self.next_harvest_time);
             },
             ScoutState::Wait => {
                 log::trace!("{}:{} -- ScoutState::Wait", self.username, self.ship.id);
                 if Utc::now().ge(&self.next_harvest_time) {
-                    log::trace!("{}:{} -- Ship assigned to {} to harvest market data has finished waiting for next harvest time", self.username, self.ship.id, self.location_symbol);
+                    log::trace!("{}:{} -- Ship assigned to {} to harvest market data has finished waiting for next harvest time", self.username, self.ship.id, self.location);
                     self.state = ScoutState::HarvestMarketData;
                 }
             },

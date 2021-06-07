@@ -22,7 +22,6 @@ async fn main() -> Result<()> {
     let postgres_database = env::var("POSTGRES_DATABASE").unwrap();
 
     let pg_pool = db::get_db_pool(postgres_host, postgres_port, postgres_username, postgres_password, postgres_database).await?;
-    // db::run_migrations(pg_pool.clone()).await?;
 
     HttpServer::new(move || App::new()
         .wrap(Cors::permissive())

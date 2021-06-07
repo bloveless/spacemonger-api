@@ -63,3 +63,10 @@ pub struct JettisonCargo {
     pub quantity: i32,
 }
 
+/// The representation of a warp jump request
+#[derive(Serialize, Debug)]
+pub struct WarpJump {
+    /// The ship id to attempt a warp jump
+    #[serde(rename(serialize = "shipId"))]
+    pub ship_id: String,
+}

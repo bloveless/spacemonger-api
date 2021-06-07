@@ -6,7 +6,7 @@ use spacetraders::{client, responses, shared};
 use spacetraders::responses::MyShips;
 use spacetraders::shared::LoanType;
 use spacetraders::errors::SpaceTradersClientError;
-use crate::ship_machines::{ShipMachine, ShipAssignment, new_trader_machine, new_scout_machine};
+use crate::ship_machines::{ShipMachine, ShipAssignment, builder::ShipMachineBuilder};
 
 #[derive(Debug, Clone)]
 pub struct User {
@@ -15,7 +15,9 @@ pub struct User {
     pub id: String,
     client: Client,
     pg_pool: PgPool,
-    assignment: ShipAssignment,
+    new_ship_assignment: ShipAssignment,
+    pub new_ship_system: String,
+    pub new_ship_location: Option<String>,
     pub ship_machines: Vec<ShipMachine>,
     pub loans: Vec<shared::Loan>,
     pub outstanding_loans: usize,
@@ -23,7 +25,7 @@ pub struct User {
 }
 
 impl User {
-    pub async fn new(http_client: HttpClient, pg_pool: PgPool, username: String, assignment: ShipAssignment) -> anyhow::Result<User> {
+    pub async fn new(http_client: HttpClient, pg_pool: PgPool, username: String, new_ship_assignment: ShipAssignment, new_ship_system: String, new_ship_location: Option<String>) -> anyhow::Result<User> {
         let db_user = db::get_user(pg_pool.clone(), username.clone()).await?;
 
         if let Some(user) = db_user {
@@ -41,17 +43,19 @@ impl User {
                 id: user.id,
                 client,
                 pg_pool: pg_pool.clone(),
-                assignment: assignment.clone(),
+                new_ship_assignment: new_ship_assignment.clone(),
+                new_ship_system: new_ship_system.clone(),
+                new_ship_location: new_ship_location.clone(),
                 ship_machines: Vec::new(),
                 credits: info.user.credits,
-                loans: loans.loans.clone(),
-                outstanding_loans: loans.loans.into_iter().filter(|f| { !f.status.contains("PAID") }).count()
+                outstanding_loans: loans.loans.iter().filter(|f| { !f.status.contains("PAID") }).count(),
+                loans: loans.loans,
             };
 
-            user.add_ship_machines_from_user_info(&ships, &assignment);
+            user.add_ship_machines_from_user_info(&ships, &new_ship_assignment);
 
             for ship in &ships.ships {
-                db::persist_ship(pg_pool.clone(), &user.id, ship).await?;
+                db::persist_ship(pg_pool.clone(), &user.id, &new_ship_system, ship).await?;
             }
 
             Ok(user)
@@ -65,7 +69,8 @@ impl User {
                 pg_pool.clone(),
                 username.clone(),
                 claimed_user.token.clone(),
-                assignment.clone(),
+                &new_ship_assignment,
+                &new_ship_system,
             ).await?;
 
             log::debug!("New user persisted");
@@ -83,17 +88,19 @@ impl User {
                 id: db_user.id,
                 client,
                 pg_pool: pg_pool.clone(),
-                assignment: assignment.clone(),
+                new_ship_assignment: new_ship_assignment.clone(),
+                new_ship_system: new_ship_system.clone(),
+                new_ship_location: new_ship_location.clone(),
                 ship_machines: Vec::new(),
                 credits: info.user.credits,
                 loans: loans.loans.clone(),
-                outstanding_loans: loans.loans.into_iter().filter(|f| { !f.status.contains("PAID") }).count()
+                outstanding_loans: loans.loans.iter().filter(|f| { !f.status.contains("PAID") }).count()
             };
 
-            user.add_ship_machines_from_user_info(&ships, &assignment);
+            user.add_ship_machines_from_user_info(&ships, &new_ship_assignment);
 
             for ship in &ships.ships {
-                db::persist_ship(pg_pool.clone(), &user.id, ship).await?;
+                db::persist_ship(pg_pool.clone(), &user.id, &new_ship_system, ship).await?;
             }
 
             Ok(user)
@@ -101,30 +108,26 @@ impl User {
     }
 
     fn add_ship_machines_from_user_info(&mut self, ships: &MyShips, assignment: &ShipAssignment) {
-        self.ship_machines = ships.ships.clone().into_iter().map(|ship| {
-            self.ship_to_machine(&ship, &assignment)
+        self.ship_machines = ships.ships.iter().map(|ship| {
+            self.ship_to_machine(ship, &assignment)
         }).collect()
     }
 
     fn ship_to_machine(&self, ship: &shared::Ship, assignment: &ShipAssignment) -> ShipMachine {
-        match assignment {
-            ShipAssignment::Trader => new_trader_machine(
-                self.client.clone(),
-                self.pg_pool.clone(),
-                self.username.clone(),
-                self.id.clone(),
-                ship.clone(),
-            ),
-            ShipAssignment::Scout { system_symbol, location_symbol } => new_scout_machine(
-                self.client.clone(),
-                self.pg_pool.clone(),
-                self.username.clone(),
-                self.id.clone(),
-                ship.clone(),
-                system_symbol.to_owned(),
-                location_symbol.to_owned()
-            )
+        let mut ship_machine_builder = ShipMachineBuilder::new();
+        ship_machine_builder.client(self.client.clone())
+            .pg_pool(self.pg_pool.clone())
+            .user_id(self.id.clone())
+            .username(self.username.clone())
+            .system(self.new_ship_system.clone())
+            .assignment(assignment.clone())
+            .ship(ship.clone());
+
+        if let Some(new_ship_location) = self.new_ship_location.clone() {
+            ship_machine_builder.location(new_ship_location);
         }
+
+        ship_machine_builder.build().expect("Unable to build ship")
     }
 
     pub async fn request_new_loan(&mut self, loan_type: LoanType) -> anyhow::Result<()> {
@@ -135,7 +138,7 @@ impl User {
 
         // Keep track of loans...
         self.loans.push(loan_response.loan);
-        self.outstanding_loans = self.loans.clone().into_iter().filter(|f| { !f.status.contains("PAID") }).count();
+        self.outstanding_loans = self.loans.iter().filter(|f| { !f.status.contains("PAID") }).count();
 
         Ok(())
     }
@@ -144,15 +147,15 @@ impl User {
         let purchase_ship_response = self.client.purchase_ship(fastest_ship_location, ship_type).await?;
 
         // TODO: Record new ship
-        db::persist_ship(self.pg_pool.clone(), &self.id, &purchase_ship_response.ship).await?;
+        db::persist_ship(self.pg_pool.clone(), &self.id, &self.new_ship_system, &purchase_ship_response.ship).await?;
 
         self.credits = purchase_ship_response.credits;
-        self.ship_machines.push(self.ship_to_machine(&purchase_ship_response.ship, &self.assignment));
+        self.ship_machines.push(self.ship_to_machine(&purchase_ship_response.ship, &self.new_ship_assignment));
 
         Ok(())
     }
 
-    pub async fn purchase_fastest_ship(&mut self, system_symbol: Option<&str>) -> anyhow::Result<()> {
+    pub async fn purchase_fastest_ship(&mut self) -> anyhow::Result<()> {
         let available_ships = self.client.get_ships_for_sale().await?;
         let mut fastest_ship = None;
         let mut fastest_ship_speed: i32 = 0;
@@ -182,7 +185,7 @@ impl User {
                     && available_ship.restricted_goods == None
                     && self.credits > purchase_location.price
                     && (ships_count == 0 || valid_locations.contains(&purchase_location.location))
-                    && (system_symbol.is_none() || purchase_location.system == system_symbol.unwrap())
+                    && purchase_location.system == self.new_ship_system
                 {
                     fastest_ship_speed = available_ship.speed;
                     fastest_ship = Some(available_ship);
@@ -202,7 +205,7 @@ impl User {
         Ok(())
     }
 
-    pub async fn purchase_largest_ship(&mut self, system_symbol: Option<&str>) -> anyhow::Result<()> {
+    pub async fn purchase_largest_ship(&mut self) -> anyhow::Result<()> {
         let available_ships = self.client.get_ships_for_sale().await?;
         let mut largest_ship = None;
         let mut largest_ship_capacity: i32 = 0;
@@ -232,7 +235,7 @@ impl User {
                     && available_ship.restricted_goods == None
                     && self.credits > purchase_location.price
                     && (ships_count == 0 || valid_locations.contains(&purchase_location.location))
-                    && (system_symbol.is_none() || purchase_location.system == system_symbol.unwrap())
+                    && purchase_location.system == self.new_ship_system
                 {
                     largest_ship_capacity = available_ship.max_cargo;
                     largest_ship = Some(available_ship);

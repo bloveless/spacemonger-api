@@ -1,6 +1,6 @@
 daemon_tag = 0.1.0-alpha.80
 tor_tag = 0.1.0-alpha.4
-api_tag = 0.1.0-alpha.19
+api_tag = 0.1.0-alpha.20
 
 publish-daemon:
 	docker build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:$(daemon_tag) .
@@ -17,17 +17,11 @@ publish-api:
 	docker build --platform linux/arm64 -f docker/api/Dockerfile -t bloveless/spacemonger-api:$(api_tag) .
 	docker push bloveless/spacemonger-api:$(api_tag)
 
-migration-daemon:
+migration:
 	cd daemon; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate add $(name)
 
-migration-api:
-	cd api; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate add $(name)
-
-migrate-daemon:
+migrate:
 	cd daemon; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate run
-
-migrate-api:
-	cd api; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate run
 
 watch-api:
 	cargo watch -x 'run --package spacemonger-api --bin spacemonger-api'

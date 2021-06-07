@@ -21,16 +21,15 @@ pub struct DbUser {
     pub id: String,
     pub username: String,
     pub token: String,
-    pub assignment: String,
-    pub system_symbol: Option<String>,
-    pub location_symbol: Option<String>,
+    pub new_ship_assignment: String,
+    pub new_ship_system: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct DbSystemLocation {
-    pub system_symbol: String,
+    pub system: String,
     pub system_name: String,
-    pub location_symbol: String,
+    pub location: String,
     pub location_name: String,
     pub location_type: String,
     pub x: i32,
@@ -40,9 +39,9 @@ pub struct DbSystemLocation {
 
 #[derive(Debug, Clone)]
 pub struct DbRoute {
-    pub purchase_location_symbol: String,
+    pub purchase_location: String,
     pub purchase_location_type: String,
-    pub sell_location_symbol: String,
+    pub sell_location: String,
     pub good: Good,
     pub distance: f64,
     pub purchase_quantity: i32,
@@ -118,7 +117,7 @@ pub async fn reset_db(pg_pool: PgPool) -> anyhow::Result<()> {
 pub async fn get_user(pg_pool: PgPool, username: String) -> anyhow::Result<Option<DbUser>> {
     Ok(
         sqlx::query("
-            SELECT id::text, username, token, assignment, system_symbol, location_symbol FROM daemon_user
+            SELECT id::text, username, token, new_ship_assignment, new_ship_system FROM daemon_user
             WHERE username = $1
             LIMIT 1;
         ")
@@ -128,9 +127,8 @@ pub async fn get_user(pg_pool: PgPool, username: String) -> anyhow::Result<Optio
                     id: row.get("id"),
                     username: row.get("username"),
                     token: row.get("token"),
-                    assignment: row.get("assignment"),
-                    system_symbol: row.get("system_symbol"),
-                    location_symbol: row.get("location_symbol"),
+                    new_ship_assignment: row.get("new_ship_assignment"),
+                    new_ship_system: row.get("new_ship_system"),
                 }
             })
             .fetch_optional(&pg_pool)
@@ -138,42 +136,30 @@ pub async fn get_user(pg_pool: PgPool, username: String) -> anyhow::Result<Optio
     )
 }
 
-pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assignment: ShipAssignment) -> anyhow::Result<DbUser> {
-    let assignment_type;
-    let assignment_system_symbol;
-    let assignment_location_symbol;
-    match assignment {
-        ShipAssignment::Scout { system_symbol, location_symbol } => {
-            assignment_type = "scout";
-            assignment_system_symbol = Some(system_symbol);
-            assignment_location_symbol = Some(location_symbol);
-        }
-        ShipAssignment::Trader => {
-            assignment_type = "trader";
-            assignment_system_symbol = None;
-            assignment_location_symbol = None;
-        }
-    }
+pub async fn persist_user(pg_pool: PgPool, username: String, token: String, new_ship_assignment: &ShipAssignment, new_ship_system: &str) -> anyhow::Result<DbUser> {
+    let new_ship_assignment = match new_ship_assignment {
+        ShipAssignment::Scout => "scout",
+        ShipAssignment::Trader => "trader",
+        ShipAssignment::SystemChange => "system_change",
+    };
 
     Ok(
         sqlx::query("
-            INSERT INTO daemon_user (username, token, assignment, system_symbol, location_symbol)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id::text, username, token, assignment, system_symbol, location_symbol;
+            INSERT INTO daemon_user (username, token, new_ship_assignment, new_ship_system)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id::text, username, token, new_ship_assignment, new_ship_system;
         ")
             .bind(&username)
             .bind(&token)
-            .bind(&assignment_type)
-            .bind(&assignment_system_symbol)
-            .bind(&assignment_location_symbol)
+            .bind(&new_ship_assignment)
+            .bind(&new_ship_system)
             .map(|row: PgRow| {
                 DbUser {
                     id: row.get("id"),
                     username: row.get("username"),
                     token: row.get("token"),
-                    assignment: row.get("assignment"),
-                    system_symbol: row.get("system_symbol"),
-                    location_symbol: row.get("location_symbol"),
+                    new_ship_assignment: row.get("new_ship_assignment"),
+                    new_ship_system: row.get("new_ship_system"),
                 }
             })
             .fetch_one(&pg_pool)
@@ -183,9 +169,9 @@ pub async fn persist_user(pg_pool: PgPool, username: String, token: String, assi
 
 pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsInfoData, location: &shared::SystemsInfoLocation) -> anyhow::Result<()> {
     sqlx::query("
-        INSERT INTO daemon_system_info(system_symbol, system_name, location_symbol, location_name, location_type, x, y)
+        INSERT INTO daemon_system_info(system, system_name, location, location_name, location_type, x, y)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (system_symbol, location_symbol)
+        ON CONFLICT (system, location)
         DO UPDATE SET
             system_name = $2,
             location_name = $4,
@@ -207,19 +193,19 @@ pub async fn persist_system_location(pg_pool: PgPool, system: &shared::SystemsIn
     Ok(())
 }
 
-pub async fn get_system_locations_from_location(pg_pool: PgPool, location_symbol: &str) -> anyhow::Result<Vec<String>> {
+pub async fn get_system_locations_from_location(pg_pool: PgPool, location: &str) -> anyhow::Result<Vec<String>> {
     Ok(
         sqlx::query("
             SELECT
-                dsi.location_symbol
+                dsi.location
             FROM daemon_system_info dsi
             INNER JOIN daemon_system_info dsi2
-                ON dsi.system_symbol = dsi2.system_symbol
-            WHERE dsi2.location_symbol = $1;
+                ON dsi.system = dsi2.system
+            WHERE dsi2.location = $1;
         ")
-            .bind(location_symbol)
+            .bind(location)
             .map(|row: PgRow| {
-                row.get("location_symbol")
+                row.get("location")
             })
             .fetch_all(&pg_pool)
             .await?
@@ -257,27 +243,27 @@ pub async fn persist_flight_plan(pg_pool: PgPool, user_id: &str, ship_id: &str, 
     Ok(())
 }
 
-pub async fn get_system_location(pg_pool: PgPool, location_symbol: String) -> anyhow::Result<DbSystemLocation> {
+pub async fn get_system_location(pg_pool: PgPool, location: String) -> anyhow::Result<DbSystemLocation> {
     Ok(
         sqlx::query("
             SELECT
-                 system_symbol
+                 system
                 ,system_name
-                ,location_symbol
+                ,location
                 ,location_name
                 ,location_type
                 ,x
                 ,y
                 ,created_at
             FROM daemon_system_info
-            WHERE location_symbol = $1;
+            WHERE location = $1;
         ")
-            .bind(&location_symbol)
+            .bind(&location)
             .map(|row: PgRow| {
                 DbSystemLocation {
-                    system_symbol: row.get("system_symbol"),
+                    system: row.get("system"),
                     system_name: row.get("system_name"),
-                    location_symbol: row.get("location_symbol"),
+                    location: row.get("location"),
                     location_name: row.get("location_name"),
                     location_type: row.get("location_type"),
                     x: row.get("x"),
@@ -300,9 +286,9 @@ pub async fn get_distance_between_locations(pg_pool: PgPool, origin: &str, desti
             INNER JOIN daemon_system_info dsi2
                 -- for now we are going to restrict this to the same system since we don't have
                 -- multiple stops built yet
-                ON dsi1.system_symbol = dsi2.system_symbol
-            WHERE dsi1.location_symbol = $1
-                AND dsi2.location_symbol = $2;
+                ON dsi1.system = dsi2.system
+            WHERE dsi1.location = $1
+                AND dsi2.location = $2;
         ")
             .bind(origin)
             .bind(destination)
@@ -358,12 +344,12 @@ pub async fn get_active_flight_plan(pg_pool: PgPool, ship_id: &str) -> anyhow::R
     )
 }
 
-pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketplace_data: &shared::MarketplaceData) -> anyhow::Result<()> {
+pub async fn persist_market_data(pg_pool: PgPool, location: &str, marketplace_data: &shared::MarketplaceData) -> anyhow::Result<()> {
     sqlx::query("
-        INSERT INTO daemon_market_data(location_symbol, good_symbol, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
+        INSERT INTO daemon_market_data(location, good, price_per_unit, volume_per_unit, quantity_available, purchase_price_per_unit, sell_price_per_unit)
         VALUES ($1, $2, $3, $4, $5, $6, $7);
     ")
-        .bind(location_symbol)
+        .bind(location)
         .bind(&marketplace_data.symbol.to_string())
         .bind(&marketplace_data.price_per_unit)
         .bind(&marketplace_data.volume_per_unit)
@@ -376,7 +362,7 @@ pub async fn persist_market_data(pg_pool: PgPool, location_symbol: &str, marketp
     Ok(())
 }
 
-pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, ship_speed: i32) -> anyhow::Result<Vec<DbRoute>> {
+pub async fn get_routes_from_location(pg_pool: PgPool, location: &str, ship_speed: i32) -> anyhow::Result<Vec<DbRoute>> {
     let mut transaction = pg_pool.begin().await.unwrap();
 
     sqlx::query("DROP TABLE IF EXISTS tmp_latest_location_goods;")
@@ -385,11 +371,11 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, sh
 
     sqlx::query("
         CREATE TEMPORARY TABLE tmp_latest_location_goods (
-             location_symbol VARCHAR(100) NOT NULL
+             location VARCHAR(100) NOT NULL
             ,location_type VARCHAR(100) NOT NULL
             ,x INT NOT NULL
             ,y INT NOT NULL
-            ,good_symbol VARCHAR(100) NOT NULL
+            ,good VARCHAR(100) NOT NULL
             ,quantity_available INT NOT NULL
             ,price_per_unit INT NOT NULL
             ,volume_per_unit INT NOT NULL
@@ -405,38 +391,38 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, sh
             SELECT
                  id
                 ,ROW_NUMBER() OVER (
-                    PARTITION BY location_symbol, good_symbol
+                    PARTITION BY location, good
                     ORDER BY created_at DESC
                 ) AS rank
             FROM daemon_market_data
         )
         INSERT INTO tmp_latest_location_goods (
-             location_symbol
+             location
             ,location_type
             ,x
             ,y
-            ,good_symbol
+            ,good
             ,quantity_available
             ,price_per_unit
             ,volume_per_unit
             ,created_at
         )
         SELECT
-             dmd.location_symbol
+             dmd.location
             ,dsi.location_type
             ,dsi.x
             ,dsi.y
-            ,dmd.good_symbol
+            ,dmd.good
             ,dmd.quantity_available
             ,dmd.price_per_unit
             ,dmd.volume_per_unit
             ,dmd.created_at
         FROM daemon_market_data dmd
         INNER JOIN ranked_location_goods rlg ON dmd.id = rlg.id
-        INNER JOIN daemon_system_info dsi on dmd.location_symbol = dsi.location_symbol
+        INNER JOIN daemon_system_info dsi on dmd.location = dsi.location
         WHERE rlg.rank = 1
             AND dmd.created_at > (now() at time zone 'utc' - INTERVAL '30 min')
-        ORDER BY dmd.good_symbol, dmd.location_symbol;
+        ORDER BY dmd.good, dmd.location;
     ")
         .execute(&mut transaction)
         .await?;
@@ -445,10 +431,10 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, sh
         -- calculate the route from each location to each location per good
         -- limited to routes which will actually turn a profit
         SELECT
-             llg1.location_symbol AS purchase_location_symbol
+             llg1.location AS purchase_location
             ,llg1.location_type AS purchase_location_type
-            ,llg2.location_symbol AS sell_location_symbol
-            ,llg2.good_symbol
+            ,llg2.location AS sell_location
+            ,llg2.good
             ,SQRT(POW(llg1.x - llg2.x, 2) + POW(llg2.y - llg1.y, 2)) AS distance
             ,llg1.quantity_available AS purchase_quantity
             ,llg2.quantity_available AS sell_quantity
@@ -458,15 +444,15 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, sh
         FROM tmp_latest_location_goods llg1
         CROSS JOIN tmp_latest_location_goods llg2
         INNER JOIN daemon_system_info from_dsi
-            ON from_dsi.location_symbol = llg1.location_symbol
+            ON from_dsi.location = llg1.location
         INNER JOIN daemon_system_info to_dsi
-            ON to_dsi.location_symbol = llg2.location_symbol
-        WHERE from_dsi.location_symbol = $1
-            AND from_dsi.system_symbol = to_dsi.system_symbol
-            AND llg1.good_symbol = llg2.good_symbol
-            AND llg1.location_symbol != llg2.location_symbol
+            ON to_dsi.location = llg2.location
+        WHERE from_dsi.location = $1
+            AND from_dsi.system = to_dsi.system
+            AND llg1.good = llg2.good
+            AND llg1.location != llg2.location
     ")
-        .bind(location_symbol)
+        .bind(location)
         .map(|row: PgRow| {
             let distance: f64 = row.get("distance");
             let location_type: String = row.get("purchase_location_type");
@@ -484,10 +470,10 @@ pub async fn get_routes_from_location(pg_pool: PgPool, location_symbol: &str, sh
             let profit_speed_volume_distance = (profit * f64::from(ship_speed)) / (f64::from(volume_per_unit) * distance);
 
             DbRoute {
-                purchase_location_symbol: row.get("purchase_location_symbol"),
+                purchase_location: row.get("purchase_location"),
                 purchase_location_type: row.get("purchase_location_type"),
-                sell_location_symbol: row.get("sell_location_symbol"),
-                good: Good::from(row.get::<String, &str>("good_symbol")),
+                sell_location: row.get("sell_location"),
+                good: Good::from(row.get::<String, &str>("good")),
                 distance: row.get("distance"),
                 purchase_quantity: row.get("purchase_quantity"),
                 sell_quantity: row.get("sell_quantity"),
@@ -575,7 +561,7 @@ pub async fn persist_request_response(
     Ok(())
 }
 
-pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -> anyhow::Result<()> {
+pub async fn persist_ship(pg_pool: PgPool, user_id: &str, system: &str, ship: &shared::Ship) -> anyhow::Result<()> {
     sqlx::query("
         INSERT INTO daemon_user_ship (
              user_id
@@ -587,6 +573,7 @@ pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -
             ,manufacturer
             ,plating
             ,weapons
+            ,system
         ) VALUES (
              $1::uuid
             ,$2
@@ -597,6 +584,7 @@ pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -
             ,$7
             ,$8
             ,$9
+            ,$10
         )
         ON CONFLICT (user_id, ship_id)
         DO UPDATE SET
@@ -607,6 +595,7 @@ pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -
             ,manufacturer = $7
             ,plating = $8
             ,weapons = $9
+            ,system = $10
             ,modified_at = timezone('utc', NOW());
     ")
         .bind(user_id)
@@ -618,10 +607,65 @@ pub async fn persist_ship(pg_pool: PgPool, user_id: &str, ship: &shared::Ship) -
         .bind(&ship.manufacturer)
         .bind(&ship.plating)
         .bind(&ship.weapons)
+        .bind(&system)
         .execute(&pg_pool)
         .await?;
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct DbShip {
+    pub user_id: String,
+    pub ship_id: String,
+    pub ship_type: String,
+    pub class: String,
+    pub max_cargo: i32,
+    pub speed: i32,
+    pub manufacturer: String,
+    pub plating: i32,
+    pub weapons: i32,
+    pub system: String,
+}
+
+pub async fn get_ship(pg_pool: PgPool, user_id: &str, ship_id: &str) -> anyhow::Result<DbShip> {
+    Ok(
+        sqlx::query("
+        SELECT
+             user_id::text
+            ,ship_id
+            ,type
+            ,class
+            ,max_cargo
+            ,speed
+            ,manufacturer
+            ,plating
+            ,weapons
+            ,system
+        FROM daemon_user_ship dus
+        WHERE dus.user_id = $1::uuid
+            AND dus.ship_id = $2
+        LIMIT 1;
+    ")
+        .bind(user_id)
+        .bind(ship_id)
+        .map(|row: PgRow| {
+            DbShip {
+                user_id: row.get("user_id"),
+                ship_id: row.get("ship_id"),
+                ship_type: row.get("type"),
+                class: row.get("class"),
+                max_cargo: row.get("max_cargo"),
+                speed: row.get("speed"),
+                manufacturer: row.get("manufacturer"),
+                plating: row.get("plating"),
+                weapons: row.get("weapons"),
+                system: row.get("system"),
+            }
+        })
+        .fetch_one(&pg_pool)
+        .await?
+    )
 }
 
 pub async fn persist_transaction(pg_pool: PgPool, transaction_type: &str, user_id: &str, order: &responses::PurchaseOrder) -> anyhow::Result<()> {
@@ -630,11 +674,11 @@ pub async fn persist_transaction(pg_pool: PgPool, transaction_type: &str, user_i
              user_id
             ,ship_id
             ,type
-            ,good_symbol
+            ,good
             ,price_per_unit
             ,quantity
             ,total
-            ,location_symbol
+            ,location
         ) VALUES (
              $1::uuid
             ,$2
@@ -678,6 +722,28 @@ pub async fn get_fuel_required(pg_pool: PgPool, origin: &str, destination: &str,
             row.get("fuel_consumed")
         })
         .fetch_optional(&pg_pool)
+        .await?
+    )
+}
+
+pub async fn get_wormhole_from_location_to_system(pg_pool: PgPool, location: &str, system: &str) -> anyhow::Result<String> {
+    Ok(sqlx::query("
+        SELECT
+            dsi2.location as location
+        FROM daemon_system_info dsi
+        INNER JOIN daemon_system_info dsi2
+            ON dsi.system = dsi2.system
+        WHERE dsi.location = $1
+            AND dsi2.location_type = 'Wormhole'
+            AND dsi2.location LIKE $2
+        LIMIT 1
+    ")
+        .bind(location)
+        .bind(format!("%{}%", system))
+        .map(|row: PgRow| {
+            row.get("location")
+        })
+        .fetch_one(&pg_pool)
         .await?
     )
 }

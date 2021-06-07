@@ -108,7 +108,7 @@ impl SpaceTradersClient {
             match self.client.execute(request.try_clone().unwrap()).await {
                 Ok(response) => {
                     let response_headers = response.headers()
-                        .into_iter().fold(HashMap::new(), |mut acc, (h, v)| {
+                        .iter().fold(HashMap::new(), |mut acc, (h, v)| {
                         acc.insert(h.to_string(), v.to_str().unwrap().to_string());
                         acc
                     });
@@ -599,7 +599,7 @@ impl Client {
     }
 
     /// Jettison cargo from a ship
-    pub async fn jettison_cargo(&self, ship_id: String, good: shared::Good, quantity: i32) -> Result<responses::JettisonCargo, SpaceTradersClientError> {
+    pub async fn jettison_cargo(&self, ship_id: &str, good: shared::Good, quantity: i32) -> Result<responses::JettisonCargo, SpaceTradersClientError> {
         let jettison_cargo_request = requests::JettisonCargo {
             good,
             quantity,
@@ -700,5 +700,21 @@ impl Client {
     ///// WARP JUMP
     //////////////////////////////////////////////
 
-    // TODO: Attempt a warp jump
+    /// Attempt a warp jump
+    pub async fn attempt_warp_jump(&self, ship_id: String) -> Result<responses::FlightPlan, SpaceTradersClientError> {
+        let warp_jump_request = requests::WarpJump {
+            ship_id
+        };
+
+        let http_client = self.http_client.lock().await;
+        let response = http_client.execute_request(
+            "POST",
+            "https://api.spacetraders.io/my/warp-jumps",
+            Some(&serde_json::to_string(&warp_jump_request).unwrap()),
+            Some(&self.token),
+        )
+            .await?;
+
+        parse_response::<responses::FlightPlan>(&response.response_text)
+    }
 }

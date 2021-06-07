@@ -62,6 +62,8 @@ async fn main() -> anyhow::Result<()> {
         pg_pool.clone(),
         format!("{}-main", username_base),
         ShipAssignment::Trader,
+        "OE".to_string(),
+        None
     ).await;
 
     if let Err(user_err) = user {
@@ -110,10 +112,9 @@ async fn main() -> anyhow::Result<()> {
                     http_client.clone(),
                     pg_pool.clone(),
                     format!("{}-scout-{}", username_base, location.symbol),
-                    ShipAssignment::Scout {
-                        system_symbol: system.symbol.clone(),
-                        location_symbol: location.symbol.clone(),
-                    },
+                    ShipAssignment::Scout,
+                    system.symbol.clone(),
+                    Some(location.symbol.clone()),
                 ).await?;
 
                 // 1. if the user doesn't have enough credits take out a startup loan
@@ -126,7 +127,7 @@ async fn main() -> anyhow::Result<()> {
 
                 // 2. if the user doesn't have any ships then buy the fastest one that the user can afford that is in the system assigned to the scout
                 if scout_user.ship_machines.is_empty() {
-                    scout_user.purchase_fastest_ship(Some(&system.symbol)).await?;
+                    scout_user.purchase_fastest_ship().await?;
                 }
 
                 users.push(scout_user);
@@ -152,7 +153,7 @@ async fn main() -> anyhow::Result<()> {
 
         // 2. if the user doesn't have any ships then buy the largest one that the user can afford
         if user.ship_machines.is_empty() {
-            user.purchase_largest_ship(None).await?;
+            user.purchase_largest_ship().await?;
         }
 
         users.push(user);
@@ -186,6 +187,7 @@ async fn main() -> anyhow::Result<()> {
                             if let Some(poll_result) = poll_result {
                                 match poll_result {
                                     PollResult::UpdateCredits(credits) => user.credits = credits,
+                                    PollResult::ConvertToNewMachine(new_machine) => panic!("convert to a new machine"),
                                 }
                             }
                         }
@@ -248,7 +250,7 @@ async fn main() -> anyhow::Result<()> {
                     // costly to fill them with goods so we add 75k per ship to make sure we don't
                     // go broke
                     if user.credits > (user.ship_machines.len() as i32 * 1_000_000) && user.ship_machines.len() < 50 {
-                        match user.purchase_largest_ship(None).await {
+                        match user.purchase_largest_ship().await {
                             Ok(_) => {}
                             Err(e) => log::error!("{} -- Error occurred while purchasing a ship. Error: {}", user.username, e)
                         };
@@ -261,7 +263,7 @@ async fn main() -> anyhow::Result<()> {
                             Ok(pay_loan_response) => {
                                 log::info!("{} -- User paid off loan id {}", user.username, loan.id);
                                 user.loans = pay_loan_response.loans.clone();
-                                user.outstanding_loans = pay_loan_response.loans.into_iter().filter(|l| { !l.status.contains("PAID") }).count();
+                                user.outstanding_loans = pay_loan_response.loans.iter().filter(|l| { !l.status.contains("PAID") }).count();
                                 user.credits = pay_loan_response.credits;
                             }
                             Err(e) => log::error!("{} -- Unable to pay off loan id {}. Error: {}", user.username, loan.id, e)
