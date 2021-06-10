@@ -1744,7 +1744,9 @@ dependencies = [
 
 [[package]]
 name = "spacetraders"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb54eb3e9538d9c4c696e7043df3be324ddcd9ae7fb952a87714edb44ea48837"
 dependencies = [
  "chrono",
  "log",

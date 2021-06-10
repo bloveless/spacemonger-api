@@ -11,7 +11,7 @@ name = "spacemongerd"
 path = "src/main.rs"
 
 [dependencies]
-spacetraders = { path = "../spacetraders" }
+spacetraders = { version = "0.1.0-alpha.6" }
 tokio = { version = "1", features = [ "full" ] }
 chrono = { version = "0.4.19", features = [ "serde" ] }
 dotenv = "0.15.0"
