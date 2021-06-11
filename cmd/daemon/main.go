@@ -30,5 +30,12 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	fmt.Println(status)
+	fmt.Printf("Game Status: %+v\n", status)
+
+	claimedUsername, err := c.ClaimUsername("bloveless-dummy-username-test")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	fmt.Printf("New Username: %+v\n", claimedUsername)
 }
