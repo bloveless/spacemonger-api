@@ -1,6 +1,11 @@
 package spacemonger
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var TooManyRetries = errors.New("too many retries")
 
 type SpaceTraderErrorMessage struct {
 	Message string `json:"message"`
