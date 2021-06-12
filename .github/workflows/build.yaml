@@ -16,6 +16,10 @@ jobs:
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
       -
+        name: Compute variables
+        id: vars
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+      -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       -
@@ -32,4 +36,4 @@ jobs:
           file: ./docker/daemon/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: bloveless/spacemongerd:0.2.0-garbage.${GITHUB_SHA::8}
+          tags: bloveless/spacemongerd:0.2.0-garbage.${{ steps.vars.outputs.sha_short }}
