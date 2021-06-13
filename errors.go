@@ -6,6 +6,8 @@ import (
 )
 
 var TooManyRetries = errors.New("too many retries")
+var Unauthorized = errors.New("unauthorized")
+var UnableToDecodeResponse = errors.New("unable to decode response")
 
 type SpaceTraderErrorMessage struct {
 	Message string `json:"message"`

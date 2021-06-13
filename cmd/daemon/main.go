@@ -32,20 +32,29 @@ func main() {
 
 	fmt.Printf("Game Status: %+v\n", status)
 
-	// claimedUsername, err := c.ClaimUsername("bloveless-dummy-username-test")
+	// claimedUsername, err := c.ClaimUsername("bloveless-another-claim-test")
 	// if err != nil {
 	// 	log.Fatalln(err)
 	// }
 
 	claimedUsername := spacemonger.ClaimUsernameResponse{
 		Token: "3d472a71-33f9-4752-a38c-761db39425c7",
-		User: spacemonger.ClaimUsernameUser{
+		User: spacemonger.ClaimUsernameResponseUser{
 			Username: "bloveless-dummy-username-test",
-			Credits: 0,
-			Ships: []spacemonger.Ship{},
-			Loans: []spacemonger.Loan{},
+			Credits:  0,
+			Ships:    []spacemonger.Ship{},
+			Loans:    []spacemonger.Loan{},
 		},
 	}
 
 	fmt.Printf("New Username: %+v\n", claimedUsername)
+
+	c.SetToken(claimedUsername.Token)
+
+	i, err := c.GetMyInfo()
+	if err != nil {
+		log.Fatalf("GetMyInfo error: %+v", err)
+	}
+
+	fmt.Printf("GetMyInfo data: %+v", i)
 }

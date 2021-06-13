@@ -1,7 +1,6 @@
 package spacemonger
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,8 +17,9 @@ import (
 
 type Client struct {
 	httpClient *http.Client
-	httpMutex *sync.Mutex
+	httpMutex  *sync.Mutex
 	baseUrl    string
+	token      string
 }
 
 func NewClient() (*Client, error) {
@@ -39,24 +39,34 @@ func NewClient() (*Client, error) {
 			Transport: transport,
 			Timeout:   time.Second * 10,
 		},
-		baseUrl: "https://api.spacetraders.io",
+		baseUrl:   "https://api.spacetraders.io",
 		httpMutex: &sync.Mutex{},
 	}, nil
 }
 
+// SetBaseUrl will override the default base url of https://api.spacetraders.io. This is only used for testing.
 func (c *Client) SetBaseUrl(base string) {
 	c.baseUrl = base
 }
 
-func (c *Client) executeRequest(method string, url string, body io.Reader, decodeResponse interface{}) error {
+// SetToken will set the token on the client for a specific user
+func (c *Client) SetToken(token string) {
+	c.token = token
+}
+
+func (c *Client) executeRequest(method string, url string, token string, body io.Reader, decodeResponse interface{}) error {
 	fullUrl := url
 	if !strings.Contains(fullUrl, "http://") && !strings.Contains(fullUrl, "https://") {
-		fullUrl = c.baseUrl+url
+		fullUrl = c.baseUrl + url
 	}
 
 	request, err := http.NewRequest(method, fullUrl, body)
 	if err != nil {
 		return err
+	}
+
+	if token != "" {
+		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
 	}
 
 	attemptCount := 0
@@ -78,33 +88,37 @@ func (c *Client) executeRequest(method string, url string, body io.Reader, decod
 			return err
 		}
 
-		// TODO: We should check the status codes here for errors and parse into the
-		//       spacetraders error struct here if that is the case and return that error here
-
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			dec := json.NewDecoder(bytes.NewReader(responseBody))
-			dec.DisallowUnknownFields() // Force errors
-
-			if err := dec.Decode(decodeResponse); err != nil {
-				// We were unable to decode the response
-				return err
+			if err := json.Unmarshal(responseBody, decodeResponse); err != nil {
+				return UnableToDecodeResponse
 			}
 
 			return nil
 		}
 
+		if response.StatusCode == 401 {
+			return Unauthorized
+		}
+
 		// Now it is time for some error handling
 		if response.StatusCode == 429 {
-			// TODO: Handle rate limiting retry logic
 			retryAfter, err := strconv.ParseFloat(response.Header.Get("retry-after"), 64)
 			if err != nil {
 				return errors.New("unable to parse retry-after header as float64")
 			}
 
 			waitTime := time.Duration(retryAfter*1000) * time.Millisecond
-			fmt.Printf("Rate limited... waiting for %v seconds before trying again. Request: \"%s %s\"\n", waitTime, method, url);
+			fmt.Printf("Rate limited... waiting for %v seconds before trying again. Request: \"%s %s\"\n", waitTime, method, url)
 
 			time.Sleep(waitTime)
+			continue
+		}
+
+		if response.StatusCode == 500 {
+			// If there was an internal server error then try the request again in 2 seconds
+			fmt.Printf("Caught internal server error retrying in 2 seconds. %s", responseBody)
+			time.Sleep(2 * time.Second)
+
 			continue
 		}
 
@@ -118,9 +132,10 @@ func (c *Client) executeRequest(method string, url string, body io.Reader, decod
 	}
 }
 
+// GetMyIpAddress will get the clients current external ip address
 func (c *Client) GetMyIpAddress() (MyIpAddressResponse, error) {
 	r := MyIpAddressResponse{}
-	err := c.executeRequest("GET", "https://api.ipify.org?format=json", nil, &r)
+	err := c.executeRequest("GET", "https://api.ipify.org?format=json", "", nil, &r)
 	if err != nil {
 		return MyIpAddressResponse{}, err
 	}
@@ -128,9 +143,21 @@ func (c *Client) GetMyIpAddress() (MyIpAddressResponse, error) {
 	return r, nil
 }
 
+// ClaimUsername will claim a username and return a token
+func (c *Client) ClaimUsername(username string) (ClaimUsernameResponse, error) {
+	r := ClaimUsernameResponse{}
+	err := c.executeRequest("POST", fmt.Sprintf("/users/%s/token", username), "", nil, &r)
+	if err != nil {
+		return ClaimUsernameResponse{}, err
+	}
+
+	return r, nil
+}
+
+// GetGameStatus will return the current status of https://api.spacetraders.io
 func (c *Client) GetGameStatus() (GameStatusResponse, error) {
 	r := GameStatusResponse{}
-	err := c.executeRequest("GET", "/game/status", nil, &r)
+	err := c.executeRequest("GET", "/game/status", "", nil, &r)
 	if err != nil {
 		return GameStatusResponse{}, err
 	}
@@ -138,11 +165,26 @@ func (c *Client) GetGameStatus() (GameStatusResponse, error) {
 	return r, nil
 }
 
-func (c *Client) ClaimUsername(username string) (ClaimUsernameResponse, error) {
-	r := ClaimUsernameResponse{}
-	err := c.executeRequest("POST", fmt.Sprintf("/users/%s/token", username), nil, &r)
+// ////////////////////////////////////////////
+// /// ACCOUNT
+// ////////////////////////////////////////////
+
+// GetMyInfo returns the current users info
+func (c *Client) GetMyInfo() (UserInfo, error) {
+	r := UserInfo{}
+	err := c.executeRequest("GET", "https://api.spacetraders.io/my/account", c.token, nil, &r)
 	if err != nil {
-		return ClaimUsernameResponse{}, err
+		return UserInfo{}, err
+	}
+
+	return r, nil
+}
+
+func (c *Client) GetFlightPlan(flightPlanId string) (FlightPlan, error) {
+	r := FlightPlan{}
+	err := c.executeRequest("GET", fmt.Sprintf("https://api.spacetraders.io/my/flight-plans/%s", flightPlanId), c.token, nil, &r)
+	if err != nil {
+		return FlightPlan{}, err
 	}
 
 	return r, nil

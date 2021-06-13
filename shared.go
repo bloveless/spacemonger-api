@@ -3,53 +3,46 @@ package spacemonger
 import "time"
 
 type Cargo struct {
-	/// The good in the cargo
-	Good string `json:"good"`
-	/// The quantity of the good
-	Quantity int `json:"quantity"`
-	/// The total volume consumed by the good
-	TotalVolume int `json:"totalVolume"`
+	Good        string `json:"good"`
+	Quantity    int    `json:"quantity"`
+	TotalVolume int    `json:"totalVolume"`
 }
 
 type Ship struct {
-	ID string `json:"id"`
-	/// The current location of the ship or None if the ship is in transit
-	Location string `json:"location"`
-	/// Any cargo within the ship
-	Cargo []Cargo `json:"cargo"`
-	/// The volume available in the ships cargo
-	SpaceAvailable int `json:"spaceAvailable"`
-	/// The type of the ship
-	ShipType string `json:"type"`
-	/// The class of the ship
-	Class string
-	/// The maximum cargo volume of the ship
-	MaxCargo int `json:"maxCargo"`
-	/// The speed rating of the ship
-	Speed int `json:"speed"`
-	/// The manufacturer of the ship
-	Manufacturer string `json:"manufacturer"`
-	/// The defensive rating of the ship
-	Plating int `json:"plating"`
-	/// The offensive rating of the ship
-	Weapons int `json:"weapons"`
-	/// The ships current X coordinate
-	X int `json:"x"`
-	/// The ships current Y coordinate
-	Y int `json:"y"`
-	/// The ships current flight plan
-	FlightPlanID string `json:"flightPlanId"`
+	Id             string  `json:"id"`
+	Location       string  `json:"location"`
+	Cargo          []Cargo `json:"cargo"`
+	SpaceAvailable int     `json:"spaceAvailable"`
+	ShipType       string  `json:"type"`
+	Class          string
+	MaxCargo       int    `json:"maxCargo"`
+	Speed          int    `json:"speed"`
+	Manufacturer   string `json:"manufacturer"`
+	Plating        int    `json:"plating"`
+	Weapons        int    `json:"weapons"`
+	X              int    `json:"x"`
+	Y              int    `json:"y"`
+	FlightPlanId   string `json:"flightPlanId"`
 }
 
 type Loan struct {
-	/// The id of the loan
-	ID string
-	/// The due date of the loan
-	Due time.Time
-	/// The repayment amount of the loan
-	ReplaymentAmount int `json:"replaymentAmount"`
-	/// The current loan status
-	Status string
-	/// The type of the loan
-	LoanType string `json:"type"`
+	Id              string    `json:"id"`
+	Due             time.Time `json:"due"`
+	RepaymentAmount int       `json:"repaymentAmount"`
+	Status          string    `json:"status"`
+	LoanType        string    `json:"type"`
+}
+
+type FlightPlanData struct {
+	Id string `json:"id"`
+	ShipId string `json:"shipId"`
+	FuelConsumed int `json:"fuelConsumed"`
+	FuelRemaining int `json:"fuelRemaining"`
+	TimeRemainingInSeconds int `json:"timeRemainingInSeconds"`
+	CreatedAt int `json:"createdAt"`
+	ArrivesAt int `json:"arrivesAt"`
+	TerminatedAt int `json:"terminatedAt"`
+	Destination string `json:"destination"`
+	Departure string `json:"departure"`
+	Distance int `json:"distance"`
 }
