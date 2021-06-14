@@ -6,6 +6,7 @@ import (
 )
 
 var TooManyRetries = errors.New("too many retries")
+var InvalidRequest = errors.New("the given request was invalid")
 var Unauthorized = errors.New("unauthorized")
 var UnableToDecodeResponse = errors.New("unable to decode response")
 

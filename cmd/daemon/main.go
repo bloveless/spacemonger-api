@@ -32,29 +32,49 @@ func main() {
 
 	fmt.Printf("Game Status: %+v\n", status)
 
-	// claimedUsername, err := c.ClaimUsername("bloveless-another-claim-test")
+	// claimedUsername, err := c.ClaimUsername("blove-go-test")
 	// if err != nil {
 	// 	log.Fatalln(err)
 	// }
 
-	claimedUsername := spacemonger.ClaimUsernameResponse{
-		Token: "3d472a71-33f9-4752-a38c-761db39425c7",
-		User: spacemonger.ClaimUsernameResponseUser{
-			Username: "bloveless-dummy-username-test",
-			Credits:  0,
-			Ships:    []spacemonger.Ship{},
-			Loans:    []spacemonger.Loan{},
-		},
-	}
+	// claimedUsername := spacemonger.ClaimUsernameResponse{
+	// 	Token: "3d472a71-33f9-4752-a38c-761db39425c7",
+	// 	User: spacemonger.ClaimUsernameResponseUser{
+	// 		Username: "bloveless-dummy-username-test",
+	// 		Credits:  0,
+	// 		Ships:    []spacemonger.Ship{},
+	// 		Loans:    []spacemonger.Loan{},
+	// 	},
+	// }
+	//
+	// fmt.Printf("New Username: %+v\n", claimedUsername)
 
-	fmt.Printf("New Username: %+v\n", claimedUsername)
+	// username := "blove-go-test"
+	token := "c53e4835-d8cc-4579-b7d5-99b1df31bf8e"
 
-	c.SetToken(claimedUsername.Token)
+	c.SetToken(token)
 
-	i, err := c.GetMyInfo()
+	myInfo, err := c.GetMyInfo()
 	if err != nil {
 		log.Fatalf("GetMyInfo error: %+v", err)
 	}
 
-	fmt.Printf("GetMyInfo data: %+v", i)
+	fmt.Printf("GetMyInfo data: %+v", myInfo)
+
+	if myInfo.User.Credits == 0 {
+		createLoanResponse, err := c.CreateLoan(spacemonger.StartUpLoan)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("New Loan: %+v\n", createLoanResponse)
+	}
+
+	myLoans, err := c.GetMyLoans()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("My Loans: %+v\n", myLoans)
+
 }

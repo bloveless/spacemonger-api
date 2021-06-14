@@ -33,16 +33,69 @@ type Loan struct {
 	LoanType        string    `json:"type"`
 }
 
-type FlightPlanData struct {
-	Id string `json:"id"`
-	ShipId string `json:"shipId"`
-	FuelConsumed int `json:"fuelConsumed"`
-	FuelRemaining int `json:"fuelRemaining"`
-	TimeRemainingInSeconds int `json:"timeRemainingInSeconds"`
-	CreatedAt int `json:"createdAt"`
-	ArrivesAt int `json:"arrivesAt"`
-	TerminatedAt int `json:"terminatedAt"`
-	Destination string `json:"destination"`
-	Departure string `json:"departure"`
-	Distance int `json:"distance"`
+type FlightPlan struct {
+	Id                     string `json:"id"`
+	ShipId                 string `json:"shipId"`
+	FuelConsumed           int    `json:"fuelConsumed"`
+	FuelRemaining          int    `json:"fuelRemaining"`
+	TimeRemainingInSeconds int    `json:"timeRemainingInSeconds"`
+	CreatedAt              int    `json:"createdAt"`
+	ArrivesAt              int    `json:"arrivesAt"`
+	TerminatedAt           int    `json:"terminatedAt"`
+	Destination            string `json:"destination"`
+	Departure              string `json:"departure"`
+	Distance               int    `json:"distance"`
+}
+
+type Structure struct {
+	Id            string `json:"id"`
+	StructureType string `json:"structureType"`
+	Location      string `json:"location"`
+}
+
+type LocationDetails struct {
+	Symbol             string      `json:"symbol"`
+	LocationType       string      `json:"type"`
+	Name               string      `json:"name"`
+	X                  int         `json:"x"`
+	Y                  int         `json:"y"`
+	AnsibleProgress    float64     `json:"ansibleProgress"`
+	Anomaly            string      `json:"anomaly"`
+	Structures         []Structure `json:"structures"`
+	Messages           []string    `json:"messages"`
+	AllowsConstruction bool        `json:"allowsConstruction"`
+}
+
+type MarketplaceData struct {
+	Good                 string `json:"symbol"`
+	VolumePerUnit        int    `json:"volumePerUnit"`
+	PurchasePricePerUnit int    `json:"purchasePricePerUnit"`
+	SellPricePerUnit     int    `json:"sellPricePerUnit"`
+	QuantityAvailable    int    `json:"quantityAvailable"`
+}
+
+type OrderData struct {
+	Good         string `json:"good"`
+	Quantity     int    `json:"quantity"`
+	PricePerUnit int    `json:"pricePerUnit"`
+	Total        int    `json:"total"`
+}
+
+type SystemLocation struct {
+	Symbol             string      `json:"symbol"`
+	SystemLocationType string      `json:"type"`
+	Name               string      `json:"name"`
+	X                  int         `json:"x"`
+	Y                  int         `json:"y"`
+	AnsibleProgress    float64     `json:"ansibleProgress"`
+	Anomaly            string      `json:"anomaly"`
+	Structures         []Structure `json:"structures"`
+	Messages           []string    `json:"messages"`
+	AllowsConstruction bool        `json:"allowsConstruction"`
+}
+
+type System struct {
+	Symbol    string           `json:"symbol"`
+	Name      string           `json:"name"`
+	Locations []SystemLocation `json:"locations"`
 }
