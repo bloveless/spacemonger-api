@@ -17,7 +17,7 @@ func TestInvalidJsonResponse(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -26,7 +26,7 @@ func TestInvalidJsonResponse(t *testing.T) {
 	c.SetBaseUrl(ts.URL)
 
 	_, err = c.GetGameStatus()
-	if !errors.Is(err, spacetrader.spacemonger.UnableToDecodeResponse) {
+	if !errors.Is(err, spacetrader.UnableToDecodeResponse) {
 		t.Fatalf("Expected an UnableToDecodeResponse error")
 	}
 }
@@ -39,7 +39,7 @@ func TestReceiveSpaceTraderApiError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -70,7 +70,7 @@ func TestRetryRateLimitFailThenSucceed(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -93,7 +93,7 @@ func TestRetryRateLimitAlwaysFail(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -106,7 +106,6 @@ func TestRetryRateLimitAlwaysFail(t *testing.T) {
 		t.Fatalf("Expected game status request to have retried three times and then failed")
 	}
 }
-
 
 func TestInternalServerFailureThenSucceed(t *testing.T) {
 	attemptCount := 0
@@ -125,7 +124,7 @@ func TestInternalServerFailureThenSucceed(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -147,7 +146,7 @@ func TestInternalServerFailureAlwaysFail(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -156,7 +155,7 @@ func TestInternalServerFailureAlwaysFail(t *testing.T) {
 	c.SetBaseUrl(ts.URL)
 
 	_, err = c.GetGameStatus()
-	if !errors.Is(err, spacetrader.spacemonger.TooManyRetries) {
+	if !errors.Is(err, spacetrader.TooManyRetries) {
 		t.Fatalf("Expected request to be retried and then fail with TooManyRetries")
 	}
 }
@@ -169,7 +168,7 @@ func TestGetServerStatus(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -186,4 +185,3 @@ func TestGetServerStatus(t *testing.T) {
 		t.Fatal("Returned the wrong value")
 	}
 }
-

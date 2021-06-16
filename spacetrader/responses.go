@@ -113,7 +113,7 @@ type AvailableLoan struct {
 }
 
 type GetAvailableLoansResponse struct {
-	Loans []AvailableLoan `json:"loans'"`
+	Loans []AvailableLoan `json:"loans"`
 }
 
 type WarpJumpResponse struct {

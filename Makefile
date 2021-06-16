@@ -1,30 +1,46 @@
+include .env
+
 daemon_tag = 0.1.0-alpha.80
 tor_tag = 0.1.0-alpha.4
 api_tag = 0.1.0-alpha.20
 
+.PHONY: publish-daemon
 publish-daemon:
 	docker build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:$(daemon_tag) .
 	docker push bloveless/spacemongerd:$(daemon_tag)
 
+.PHONY: publish-tor
 publish-tor:
 	docker build --platform linux/arm64 -f docker/tor/Dockerfile -t bloveless/tor:$(tor_tag) .
 	docker push bloveless/tor:$(tor_tag)
 
-deploy:
-	kubectl apply -k ./k8s/
-
+.PHONY: publish-api
 publish-api:
 	docker build --platform linux/arm64 -f docker/api/Dockerfile -t bloveless/spacemonger-api:$(api_tag) .
 	docker push bloveless/spacemonger-api:$(api_tag)
 
+.PHONY: deploy
+deploy:
+	kubectl apply -k ./k8s/
+
+.PHONY: migration
 migration:
-	cd daemon; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate add $(name)
+	migrate create -ext sql -dir ./migrations $(name)
 
+.PHONY: migrate
 migrate:
-	cd daemon; DATABASE_URL=postgresql://spacemonger:2djlsUYwcF0YzSgvTZPc9BCWff@localhost:5433 sqlx migrate run
+	migrate -source file://migrations -database $(POSTGRES_URL) up
 
-watch-api:
-	cargo watch -x 'run --package spacemonger-api --bin spacemonger-api'
+.PHONY: rollback
+rollback:
+	migrate -source file://migrations -database $(POSTGRES_URL) down 1
 
-watch-daemon:
-	cargo watch -x 'run --package spacemonger-daemon --bin spacemongerd'
+.PHONY: psql
+psql:
+	docker-compose exec postgres psql -U spacemonger
+
+# watch-api:
+# 	cargo watch -x 'run --package spacemonger-api --bin spacemonger-api'
+
+# watch-daemon:
+# 	cargo watch -x 'run --package spacemonger-daemon --bin spacemongerd'

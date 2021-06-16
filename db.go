@@ -2,8 +2,9 @@ package spacemonger
 
 import (
 	"context"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"spacemonger/spacetrader"
+
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 func GetUser(ctx context.Context, pool *pgxpool.Pool, username string) (User, error) {
