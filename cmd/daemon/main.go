@@ -1,15 +1,59 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"spacemonger"
+	"time"
+
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+type App struct {
+	config Config
+	dbPool *pgxpool.Pool
+}
+
+func NewApp() App {
+	config, err := LoadConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	pool, err := pgxpool.Connect(context.Background(), config.PostgresUrl)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
+		os.Exit(1)
+	}
+
+	return App{dbPool: pool}
+}
+
 func main() {
-	for _, e := range os.Environ() {
-		fmt.Println(e)
+	app := NewApp()
+	defer app.dbPool.Close()
+
+	fmt.Printf("Config: %+v\n", app.config)
+	fmt.Printf("PostgresUrl: %+v\n", app.config.PostgresUrl)
+
+	rows, err := app.dbPool.Query(context.Background(), "SELECT schema_name FROM information_schema.schemata")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	defer rows.Close()
+	for rows.Next() {
+		schema := ""
+
+		err = rows.Scan(&schema)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(schema)
 	}
 
 	fmt.Println("Daemon Main")
@@ -59,7 +103,7 @@ func main() {
 		log.Fatalf("GetMyInfo error: %+v", err)
 	}
 
-	fmt.Printf("GetMyInfo data: %+v", myInfo)
+	fmt.Printf("GetMyInfo data: %+v\n", myInfo)
 
 	if myInfo.User.Credits == 0 {
 		createLoanResponse, err := c.CreateLoan(spacemonger.StartUpLoan)
@@ -70,6 +114,8 @@ func main() {
 		fmt.Printf("New Loan: %+v\n", createLoanResponse)
 	}
 
+	killSwitch := make(chan struct{}, 1)
+
 	myLoans, err := c.GetMyLoans()
 	if err != nil {
 		panic(err)
@@ -77,4 +123,13 @@ func main() {
 
 	fmt.Printf("My Loans: %+v\n", myLoans)
 
+	go func() {
+		time.Sleep(10 * time.Second)
+		killSwitch <- struct{}{}
+	}()
+
+	fmt.Println("Waiting for killswitch signal")
+	<-killSwitch
+
+	fmt.Println("Received killSwitch... Good Bye")
 }
