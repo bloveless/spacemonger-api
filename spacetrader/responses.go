@@ -1,4 +1,4 @@
-package spacemonger
+package spacetrader
 
 import "time"
 
@@ -18,7 +18,7 @@ type ClaimUsernameResponseUser struct {
 }
 
 type ClaimUsernameResponse struct {
-	Token string            `json:"token"`
+	Token string                    `json:"token"`
 	User  ClaimUsernameResponseUser `json:"user"`
 }
 

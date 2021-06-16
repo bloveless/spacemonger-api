@@ -1,4 +1,4 @@
-package spacemonger
+package spacetrader
 
 import (
 	"bytes"
@@ -70,6 +70,10 @@ func (c *Client) executeRequest(method string, url string, body io.Reader, decod
 	if c.token != "" {
 		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.token))
 	}
+
+	// TODO: To mutex or not to mutex
+	c.httpMutex.Lock()
+	defer c.httpMutex.Unlock()
 
 	attemptCount := 0
 	for {

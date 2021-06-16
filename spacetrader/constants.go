@@ -1,4 +1,4 @@
-package spacemonger
+package spacetrader
 
 var (
 	StartUpLoan = "STARTUP"

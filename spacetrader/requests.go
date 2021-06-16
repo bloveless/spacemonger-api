@@ -1,4 +1,4 @@
-package spacemonger
+package spacetrader
 
 type CreateFlightPlanRequest struct {
 	ShipId      string `json:"shipId"`

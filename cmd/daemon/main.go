@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"spacemonger"
+	"spacemonger/spacetrader"
 	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -57,7 +57,7 @@ func main() {
 	}
 
 	fmt.Println("Daemon Main")
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.NewClient()
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -106,7 +106,7 @@ func main() {
 	fmt.Printf("GetMyInfo data: %+v\n", myInfo)
 
 	if myInfo.User.Credits == 0 {
-		createLoanResponse, err := c.CreateLoan(spacemonger.StartUpLoan)
+		createLoanResponse, err := c.CreateLoan(spacetrader.StartUpLoan)
 		if err != nil {
 			panic(err)
 		}

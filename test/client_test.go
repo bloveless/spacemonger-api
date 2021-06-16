@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"spacemonger"
+	"spacemonger/spacetrader"
 	"testing"
 )
 
@@ -17,7 +17,7 @@ func TestInvalidJsonResponse(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.spacemonger.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -26,7 +26,7 @@ func TestInvalidJsonResponse(t *testing.T) {
 	c.SetBaseUrl(ts.URL)
 
 	_, err = c.GetGameStatus()
-	if !errors.Is(err, spacemonger.UnableToDecodeResponse) {
+	if !errors.Is(err, spacetrader.spacemonger.UnableToDecodeResponse) {
 		t.Fatalf("Expected an UnableToDecodeResponse error")
 	}
 }
@@ -39,7 +39,7 @@ func TestReceiveSpaceTraderApiError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.spacemonger.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -70,7 +70,7 @@ func TestRetryRateLimitFailThenSucceed(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.spacemonger.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -93,7 +93,7 @@ func TestRetryRateLimitAlwaysFail(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.spacemonger.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -125,7 +125,7 @@ func TestInternalServerFailureThenSucceed(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.spacemonger.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -147,7 +147,7 @@ func TestInternalServerFailureAlwaysFail(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.spacemonger.NewClient()
 	if err != nil {
 		t.Fail()
 		return
@@ -156,7 +156,7 @@ func TestInternalServerFailureAlwaysFail(t *testing.T) {
 	c.SetBaseUrl(ts.URL)
 
 	_, err = c.GetGameStatus()
-	if !errors.Is(err, spacemonger.TooManyRetries) {
+	if !errors.Is(err, spacetrader.spacemonger.TooManyRetries) {
 		t.Fatalf("Expected request to be retried and then fail with TooManyRetries")
 	}
 }
@@ -169,7 +169,7 @@ func TestGetServerStatus(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacemonger.NewClient()
+	c, err := spacetrader.spacemonger.NewClient()
 	if err != nil {
 		t.Fail()
 		return
