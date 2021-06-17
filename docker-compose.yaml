@@ -32,8 +32,7 @@ services:
       - 5433:5432
     volumes:
       - pg_data:/var/lib/postgresql/data
-      # - ./docker/postgres/initdb.d:/docker-entrypoint-initdb.d
-      - ./daemon/migrations:/docker-entrypoint-initdb.d
+      - ./docker/postgres/initdb.d:/docker-entrypoint-initdb.d
 
   tor:
     build:
