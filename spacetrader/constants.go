@@ -1,6 +1,6 @@
 package spacetrader
 
 var (
-	StartUpLoan = "STARTUP"
+	StartUpLoan    = "STARTUP"
 	EnterpriseLoan = "ENTERPRISE"
 )

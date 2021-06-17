@@ -1,6 +1,8 @@
 package main
 
-import "github.com/spf13/viper"
+import (
+	"github.com/spf13/viper"
+)
 
 type Config struct {
 	UsernameBase string `mapstructure:"USERNAME_BASE"`

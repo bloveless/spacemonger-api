@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"spacemonger/spacetrader"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -28,15 +32,22 @@ func NewApp() App {
 		os.Exit(1)
 	}
 
-	return App{dbPool: pool}
+	return App{dbPool: pool, config: config}
 }
 
 func main() {
 	app := NewApp()
 	defer app.dbPool.Close()
 
-	fmt.Printf("Config: %+v\n", app.config)
-	fmt.Printf("PostgresUrl: %+v\n", app.config.PostgresUrl)
+	m, err := migrate.New("file://migrations", app.config.PostgresUrl)
+	if err != nil {
+		panic(err)
+	}
+
+	err = m.Up()
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		panic(err)
+	}
 
 	rows, err := app.dbPool.Query(context.Background(), "SELECT schema_name FROM information_schema.schemata")
 	if err != nil {
