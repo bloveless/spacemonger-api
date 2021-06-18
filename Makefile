@@ -39,6 +39,10 @@ rollback:
 psql:
 	docker-compose exec postgres psql -U spacemonger
 
+.PHONY: psql-test
+psql-test:
+	docker-compose exec postgres psql -U spacemonger_test
+
 # watch-api:
 # 	cargo watch -x 'run --package spacemonger-api --bin spacemonger-api'
 

@@ -1,3 +1,7 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+--
+
 CREATE TABLE public.daemon_flight_plan (
      id VARCHAR(100) NOT NULL PRIMARY KEY
     ,user_id uuid NOT NULL
@@ -40,11 +44,10 @@ CREATE TABLE public.daemon_location (
 CREATE TABLE public.daemon_market_data (
      location VARCHAR(100) NOT NULL
     ,good VARCHAR(100) NOT NULL
-    ,price_per_unit INT NOT NULL
-    ,volume_per_unit INT NOT NULL
-    ,quantity_available INT NOT NULL
     ,purchase_price_per_unit INT NOT NULL
     ,sell_price_per_unit INT NOT NULL
+    ,volume_per_unit INT NOT NULL
+    ,quantity_available INT NOT NULL
     ,created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
