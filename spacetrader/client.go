@@ -16,32 +16,34 @@ import (
 	"time"
 )
 
+// It doesn't matter how many of these clients we have... the rate limit will apply to all of the so we need a global
+// mutex that we can lock all the clients at the same time
+var httpMutex sync.Mutex
+
 type Client struct {
-	httpClient *http.Client
-	httpMutex  *sync.Mutex
+	httpClient http.Client
 	baseUrl    string
 	token      string
 }
 
-func NewClient() (*Client, error) {
+func NewClient() (Client, error) {
 	transport := &http.Transport{}
 
 	envProxy := os.Getenv("HTTP_PROXY")
 	if envProxy != "" {
 		proxy, err := url.Parse(envProxy)
 		if err != nil {
-			return nil, err
+			return Client{}, err
 		}
 		transport.Proxy = http.ProxyURL(proxy)
 	}
 
-	return &Client{
-		httpClient: &http.Client{
+	return Client{
+		httpClient: http.Client{
 			Transport: transport,
 			Timeout:   time.Second * 10,
 		},
 		baseUrl:   "https://api.spacetraders.io",
-		httpMutex: &sync.Mutex{},
 	}, nil
 }
 
@@ -72,15 +74,15 @@ func (c *Client) executeRequest(method string, url string, body io.Reader, decod
 	}
 
 	// TODO: To mutex or not to mutex
-	c.httpMutex.Lock()
-	defer c.httpMutex.Unlock()
+	httpMutex.Lock()
+	defer httpMutex.Unlock()
 
 	attemptCount := 0
 	for {
 		attemptCount += 1
 
 		if attemptCount > 3 {
-			return TooManyRetries
+			return TooManyRetriesError
 		}
 
 		response, err := c.httpClient.Do(request)
@@ -96,18 +98,21 @@ func (c *Client) executeRequest(method string, url string, body io.Reader, decod
 
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
 			if err := json.Unmarshal(responseBody, decodeResponse); err != nil {
-				return UnableToDecodeResponse
+				return UnableToDecodeResponseError
 			}
 
 			return nil
 		}
 
-		if response.StatusCode == 401 {
-			return Unauthorized
+		if response.StatusCode == http.StatusServiceUnavailable {
+			return MaintenanceModeError
 		}
 
-		// Now it is time for some error handling
-		if response.StatusCode == 429 {
+		if response.StatusCode == http.StatusUnauthorized {
+			return UnauthorizedError
+		}
+
+		if response.StatusCode == http.StatusTooManyRequests {
 			retryAfter, err := strconv.ParseFloat(response.Header.Get("retry-after"), 64)
 			if err != nil {
 				return errors.New("unable to parse retry-after header as float64")
@@ -208,7 +213,7 @@ func (c *Client) CreateFlightPlan(shipId, destination string) (CreateFlightPlanR
 	}
 	requestJson, err := json.Marshal(request)
 	if err != nil {
-		return CreateFlightPlanResponse{}, InvalidRequest
+		return CreateFlightPlanResponse{}, InvalidRequestError
 	}
 
 	response := CreateFlightPlanResponse{}

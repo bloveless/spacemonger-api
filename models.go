@@ -58,8 +58,6 @@ type Route struct {
 	PurchasePricePerUnit      int
 	SellPricePerUnit          int
 	VolumePerUnit             int
-	FuelRequired              float64
-	FlightTime                float64
 	CostVolumeDistance        float64
 	ProfitSpeedVolumeDistance float64
 }

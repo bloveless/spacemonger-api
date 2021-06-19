@@ -29,13 +29,19 @@ func GetUser(ctx context.Context, conn DBConn, username string) (User, error) {
 	return u, nil
 }
 
-func SaveUser(ctx context.Context, conn DBConn, user User) error {
-	_, err := conn.Query(ctx, `
-		INSERT INTO daemon_user (username, token, assignment, new_ship_assignment, new_ship_system)
-		VALUES ($1, $2, $3, $4, $5);
-	`, user.Username, user.Token, user.NewShipAssignment, user.NewShipSystem)
+func SaveUser(ctx context.Context, conn DBConn, user User) (User, error) {
+	err := conn.QueryRow(ctx, `
+		INSERT INTO daemon_user (username, token, new_ship_assignment, new_ship_system)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id;
+		`,
+		user.Username,
+		user.Token,
+		user.NewShipAssignment,
+		user.NewShipSystem,
+	).Scan(&user.Id)
 
-	return err
+	return user, err
 }
 
 func GetLocation(ctx context.Context, conn DBConn, location string) (Location, error) {
@@ -72,7 +78,7 @@ func GetLocation(ctx context.Context, conn DBConn, location string) (Location, e
 }
 
 func SaveLocation(ctx context.Context, conn DBConn, location Location) error {
-	_, err := conn.Query(ctx, `
+	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_location (system, system_name, location, location_name, location_type, x, y)
 		VALUES ($1, $2, $3, $4, $5, $6, $7);
 		`,
@@ -97,10 +103,10 @@ func GetSystemLocationsFromLocation(ctx context.Context, conn DBConn, location s
 			ON dl1.system = dl2.system
 		WHERE dl2.location = $1;
 	`, location)
-
 	if err != nil {
 		return []string{}, nil
 	}
+	defer rows.Close()
 
 	var locations []string
 
@@ -119,7 +125,7 @@ func GetSystemLocationsFromLocation(ctx context.Context, conn DBConn, location s
 }
 
 func SaveFlightPlan(ctx context.Context, conn DBConn, userId string, flightPlan spacetrader.FlightPlan) error {
-	_, err := conn.Query(ctx, `
+	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_flight_plan (
 			 id
 			,user_id
@@ -201,17 +207,43 @@ func GetDistanceBetweenLocations(ctx context.Context, conn DBConn, origin, desti
 	return r, nil
 }
 
-func SaveMarketData(ctx context.Context, conn DBConn, location string, marketData spacetrader.MarketplaceData) error {
-	_, err := conn.Query(ctx, `
-		INSERT INTO daemon_market_data(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
+func SaveMarketplaceData(ctx context.Context, conn DBConn, location string, marketplaceData spacetrader.MarketplaceData) error {
+	_, err := conn.Exec(ctx, `
+		INSERT INTO daemon_marketplace(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
 		VALUES ($1, $2, $3, $4, $5, $6);
 		`,
 		location,
-		marketData.Good,
-		marketData.VolumePerUnit,
-		marketData.QuantityAvailable,
-		marketData.PurchasePricePerUnit,
-		marketData.SellPricePerUnit,
+		marketplaceData.Good,
+		marketplaceData.PurchasePricePerUnit,
+		marketplaceData.SellPricePerUnit,
+		marketplaceData.VolumePerUnit,
+		marketplaceData.QuantityAvailable,
+	)
+	if err != nil {
+		return err
+	}
+
+	// TODO: It is possible that a good disappears completely from a location... how often does this happen... if ever
+	//       I can take care of it but I'm curious if it matters that much but since the marketplace data is processed
+	//       one row at a time there would need to be a more significant change to fix it. So I'm going to ignore it
+	//       until it actually becomes an issue
+
+	_, err = conn.Exec(ctx, `
+		INSERT INTO daemon_marketplace_latest(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (location, good)
+		DO UPDATE 
+			SET purchase_price_per_unit = $3,
+				sell_price_per_unit = $4,
+				volume_per_unit = $5,
+				quantity_available = $6;
+		`,
+		location,
+		marketplaceData.Good,
+		marketplaceData.PurchasePricePerUnit,
+		marketplaceData.SellPricePerUnit,
+		marketplaceData.VolumePerUnit,
+		marketplaceData.QuantityAvailable,
 	)
 	if err != nil {
 		return err
@@ -221,103 +253,114 @@ func SaveMarketData(ctx context.Context, conn DBConn, location string, marketDat
 }
 
 func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, shipSpeed int) ([]Route, error) {
-	r := []Route{}
-
-	_, err := conn.Exec(ctx, `DROP TABLE IF EXISTS tmp_latest_location_goods`)
-	if err != nil {
-		return []Route{}, err
-	}
-
-	_, err = conn.Exec(ctx, `
-		CREATE TEMPORARY TABLE tmp_latest_location_goods (
-			 location VARCHAR(100) NOT NULL
-			,location_type VARCHAR(100) NOT NULL
-			,x INT NOT NULL
-			,y INT NOT NULL
-			,good VARCHAR(100) NOT NULL
-			,purchase_price_per_unit INT NOT NULL
-			,sell_price_per_unit INT NOT NULL
-			,volume_per_unit INT NOT NULL
-			,quantity_available INT NOT NULL
-			,created_at TIMESTAMP WITH TIME ZONE NOT NULL
-		);
-	`)
-	if err != nil {
-		return []Route{}, err
-	}
-
-	_, err = conn.Exec(ctx, `
-		-- Get the latest market data from each good in each location
-		WITH ranked_location_goods AS (
-			SELECT
-				 id
-				,ROW_NUMBER() OVER (
-					PARTITION BY location, good
-					ORDER BY created_at DESC
-				) AS rank
-			FROM daemon_market_data
-		)
-		INSERT INTO tmp_latest_location_goods (
-			 location
-			,location_type
-			,x
-			,y
-			,good
-			,purchase_price_per_unit
-			,sell_price_per_unit
-			,volume_per_unit
-			,quantity_available
-			,created_at
-		)
-		SELECT
-			 dmd.location
-			,dsi.location_type
-			,dsi.x
-			,dsi.y
-			,dmd.good
-			,dmd.purchase_price_per_unit
-			,dmd.sell_price_per_unit
-			,dmd.volume_per_unit
-			,dmd.quantity_available
-			,dmd.created_at
-		FROM daemon_market_data dmd
-		INNER JOIN ranked_location_goods rlg ON dmd.id = rlg.id
-		INNER JOIN daemon_system_info dsi on dmd.location = dsi.location
-		WHERE rlg.rank = 1
-			AND dmd.created_at > (now() at time zone 'utc' - INTERVAL '30 min')
-		ORDER BY dmd.good, dmd.location;
-	`)
-	if err != nil {
-		return []Route{}, err
-	}
+	var routes []Route
 
 	rows, err := conn.Query(ctx, `
 		-- calculate the route from each location to each location per good
-		-- limited to routes which will actually turn a profit
 		SELECT
-			 llg1.location AS purchase_location
-			,llg1.location_type AS purchase_location_type
-			,llg2.location AS sell_location
-			,llg2.good
-			,SQRT(POW(llg1.x - llg2.x, 2) + POW(llg2.y - llg1.y, 2)) AS distance
-			,llg1.quantity_available AS purchase_quantity
-			,llg2.quantity_available AS sell_quantity
-			,llg1.purchase_price_per_unit AS purchase_price_per_unit
-			,llg2.sell_price_per_unit AS sell_price_per_unit
-			,llg1.volume_per_unit AS volume_per_unit
-		FROM tmp_latest_location_goods llg1
-		CROSS JOIN tmp_latest_location_goods llg2
-		INNER JOIN daemon_system_info from_dsi
-			ON from_dsi.location = llg1.location
-		INNER JOIN daemon_system_info to_dsi
-			ON to_dsi.location = llg2.location
-		WHERE from_dsi.location = $1
-			AND from_dsi.system = to_dsi.system
-			AND llg1.good = llg2.good
-			AND llg1.location != llg2.location
+			 dml1.location AS purchase_location
+			,from_dl.location_type AS purchase_location_type
+			,dml2.location AS sell_location
+			,dml2.good
+			,SQRT(POW(from_dl.x - to_dl.x, 2) + POW(from_dl.y - to_dl.y, 2)) AS distance
+			,dml1.quantity_available AS purchase_quantity_available
+			,dml2.quantity_available AS sell_quantity_available
+			,dml1.purchase_price_per_unit AS purchase_price_per_unit
+			,dml2.sell_price_per_unit AS sell_price_per_unit
+			,dml1.volume_per_unit AS volume_per_unit
+		FROM daemon_marketplace_latest dml1
+		CROSS JOIN daemon_marketplace_latest dml2
+		INNER JOIN daemon_location from_dl
+			ON from_dl.location = dml1.location
+		INNER JOIN daemon_location to_dl
+			ON to_dl.location = dml2.location
+		WHERE from_dl.location = $1
+			AND from_dl.system = to_dl.system
+			AND dml1.good = dml2.good
+			AND dml1.location != dml2.location
 		`,
 		location,
 	)
+	if err != nil {
+		return []Route{}, err
+	}
+	defer rows.Close()
 
-	return r, nil
+	for rows.Next() {
+		r := Route{}
+		err = rows.Scan(
+			&r.PurchaseLocation,
+			&r.PurchaseLocationType,
+			&r.SellLocation,
+			&r.Good,
+			&r.Distance,
+			&r.PurchaseLocationQuantity,
+			&r.SellLocationQuantity,
+			&r.PurchasePricePerUnit,
+			&r.SellPricePerUnit,
+			&r.VolumePerUnit,
+		)
+		if err != nil {
+			return []Route{}, err
+		}
+
+		profit := float64(r.SellPricePerUnit - r.PurchasePricePerUnit)
+		r.CostVolumeDistance = profit / float64(r.VolumePerUnit) / r.Distance
+		r.ProfitSpeedVolumeDistance = (profit * float64(shipSpeed)) / (float64(r.VolumePerUnit) * r.Distance)
+
+		routes = append(routes, r)
+	}
+
+	return routes, nil
+}
+
+func SaveShip(ctx context.Context, conn DBConn, userId string, ship spacetrader.Ship) error {
+	_, err := conn.Exec(ctx, `
+		INSERT INTO daemon_user_ship (
+			 user_id
+			,ship_id
+			,type
+			,class
+			,max_cargo
+			,speed
+			,manufacturer
+			,plating
+			,weapons
+		) VALUES (
+			 $1::uuid
+			,$2
+			,$3
+			,$4
+			,$5
+			,$6
+			,$7
+			,$8
+			,$9
+		)
+		ON CONFLICT (user_id, ship_id)
+		DO UPDATE SET
+			 type = $3
+			,class = $4
+			,max_cargo = $5
+			,speed = $6
+			,manufacturer = $7
+			,plating = $8
+			,weapons = $9
+			,modified_at = timezone('utc', NOW());
+		`,
+		userId,
+		ship.Id,
+		ship.ShipType,
+		ship.Class,
+		ship.MaxCargo,
+		ship.Speed,
+		ship.Manufacturer,
+		ship.Plating,
+		ship.Weapons,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

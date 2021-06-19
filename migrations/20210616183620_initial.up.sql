@@ -41,7 +41,7 @@ CREATE TABLE public.daemon_location (
 
 --
 
-CREATE TABLE public.daemon_market_data (
+CREATE TABLE public.daemon_marketplace (
      location VARCHAR(100) NOT NULL
     ,good VARCHAR(100) NOT NULL
     ,purchase_price_per_unit INT NOT NULL
@@ -51,7 +51,21 @@ CREATE TABLE public.daemon_market_data (
     ,created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_market_data_location_good ON public.daemon_market_data USING btree (location, good);
+CREATE INDEX idx_daemon_marketplace_location_good ON public.daemon_marketplace (location, good);
+
+--
+
+CREATE TABLE public.daemon_marketplace_latest (
+     location VARCHAR(100) NOT NULL
+    ,good VARCHAR(100) NOT NULL
+    ,purchase_price_per_unit INT NOT NULL
+    ,sell_price_per_unit INT NOT NULL
+    ,volume_per_unit INT NOT NULL
+    ,quantity_available INT NOT NULL
+    ,created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE UNIQUE INDEX uq_daemon_marketplace_location_good ON public.daemon_marketplace_latest (location, good);
 
 --
 

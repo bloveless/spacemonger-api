@@ -26,8 +26,8 @@ func TestInvalidJsonResponse(t *testing.T) {
 	c.SetBaseUrl(ts.URL)
 
 	_, err = c.GetGameStatus()
-	if !errors.Is(err, spacetrader.UnableToDecodeResponse) {
-		t.Fatalf("Expected an UnableToDecodeResponse error")
+	if !errors.Is(err, spacetrader.UnableToDecodeResponseError) {
+		t.Fatalf("Expected an UnableToDecodeResponseError error")
 	}
 }
 
@@ -155,8 +155,8 @@ func TestInternalServerFailureAlwaysFail(t *testing.T) {
 	c.SetBaseUrl(ts.URL)
 
 	_, err = c.GetGameStatus()
-	if !errors.Is(err, spacetrader.TooManyRetries) {
-		t.Fatalf("Expected request to be retried and then fail with TooManyRetries")
+	if !errors.Is(err, spacetrader.TooManyRetriesError) {
+		t.Fatalf("Expected request to be retried and then fail with TooManyRetriesError")
 	}
 }
 

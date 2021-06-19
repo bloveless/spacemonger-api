@@ -5,10 +5,11 @@ import (
 	"fmt"
 )
 
-var TooManyRetries = errors.New("too many retries")
-var InvalidRequest = errors.New("the given request was invalid")
-var Unauthorized = errors.New("unauthorized")
-var UnableToDecodeResponse = errors.New("unable to decode response")
+var TooManyRetriesError = errors.New("too many retries")
+var InvalidRequestError = errors.New("the given request was invalid")
+var UnauthorizedError = errors.New("unauthorized")
+var UnableToDecodeResponseError = errors.New("unable to decode response")
+var MaintenanceModeError = errors.New("server is in maintenance mode")
 
 type SpaceTraderErrorMessage struct {
 	Message string `json:"message"`

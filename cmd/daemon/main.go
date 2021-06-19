@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"spacemonger"
 	"spacemonger/spacetrader"
 	"time"
 
@@ -81,11 +82,28 @@ func main() {
 	fmt.Printf("MyIp: %+v\n", myIp)
 
 	status, err := c.GetGameStatus()
+	if errors.Is(err, spacetrader.MaintenanceModeError) {
+		for {
+			log.Println("Detected SpaceTraders API in maintenance mode (status code 503). Sleeping for 60 seconds and trying again")
+			time.Sleep(60*time.Second)
+
+			_, err = c.GetGameStatus()
+			if err == nil || !errors.Is(err, spacetrader.MaintenanceModeError) {
+				break
+			}
+		}
+	}
 	if err != nil {
 		log.Fatalln(err)
 	}
-
 	fmt.Printf("Game Status: %+v\n", status)
+
+	user, err := spacemonger.GetOrCreateUser(app.dbPool, fmt.Sprintf("%s-main", app.config.UsernameBase), "trader")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("User %+v\n", user)
+
 
 	// claimedUsername, err := c.ClaimUsername("blove-go-test")
 	// if err != nil {
@@ -125,7 +143,7 @@ func main() {
 		fmt.Printf("New Loan: %+v\n", createLoanResponse)
 	}
 
-	killSwitch := make(chan struct{}, 1)
+	killSwitch := make(chan struct{})
 
 	myLoans, err := c.GetMyLoans()
 	if err != nil {
@@ -136,7 +154,7 @@ func main() {
 
 	go func() {
 		time.Sleep(10 * time.Second)
-		killSwitch <- struct{}{}
+		close(killSwitch)
 	}()
 
 	fmt.Println("Waiting for killswitch signal")
