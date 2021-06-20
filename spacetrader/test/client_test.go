@@ -1,12 +1,14 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"spacemonger/spacetrader"
 	"testing"
+
+	"spacemonger/spacetrader"
 )
 
 func TestInvalidJsonResponse(t *testing.T) {
@@ -25,7 +27,7 @@ func TestInvalidJsonResponse(t *testing.T) {
 
 	c.SetBaseUrl(ts.URL)
 
-	_, err = c.GetGameStatus()
+	_, err = c.GetGameStatus(context.Background())
 	if !errors.Is(err, spacetrader.UnableToDecodeResponseError) {
 		t.Fatalf("Expected an UnableToDecodeResponseError error")
 	}
@@ -47,7 +49,7 @@ func TestReceiveSpaceTraderApiError(t *testing.T) {
 
 	c.SetBaseUrl(ts.URL)
 
-	_, err = c.GetGameStatus()
+	_, err = c.GetGameStatus(context.Background())
 	if err == nil {
 		t.Fatalf("Expected a SpaceTraderError but the request succeeded")
 	}
@@ -78,7 +80,7 @@ func TestRetryRateLimitFailThenSucceed(t *testing.T) {
 
 	c.SetBaseUrl(ts.URL)
 
-	_, err = c.GetGameStatus()
+	_, err = c.GetGameStatus(context.Background())
 	if err != nil {
 		t.Fatalf("Expected game status request to have succeeded after one retry")
 	}
@@ -101,7 +103,7 @@ func TestRetryRateLimitAlwaysFail(t *testing.T) {
 
 	c.SetBaseUrl(ts.URL)
 
-	_, err = c.GetGameStatus()
+	_, err = c.GetGameStatus(context.Background())
 	if err == nil {
 		t.Fatalf("Expected game status request to have retried three times and then failed")
 	}
@@ -132,7 +134,7 @@ func TestInternalServerFailureThenSucceed(t *testing.T) {
 
 	c.SetBaseUrl(ts.URL)
 
-	_, err = c.GetGameStatus()
+	_, err = c.GetGameStatus(context.Background())
 	if err != nil {
 		t.Fatalf("Expected game status request to have succeeded after one retry")
 	}
@@ -154,7 +156,7 @@ func TestInternalServerFailureAlwaysFail(t *testing.T) {
 
 	c.SetBaseUrl(ts.URL)
 
-	_, err = c.GetGameStatus()
+	_, err = c.GetGameStatus(context.Background())
 	if !errors.Is(err, spacetrader.TooManyRetriesError) {
 		t.Fatalf("Expected request to be retried and then fail with TooManyRetriesError")
 	}
@@ -176,7 +178,7 @@ func TestGetServerStatus(t *testing.T) {
 
 	c.SetBaseUrl(ts.URL)
 
-	gs, err := c.GetGameStatus()
+	gs, err := c.GetGameStatus(context.Background())
 	if err != nil {
 		t.Fatalf("Failed: getting game status %s\n", err)
 	}

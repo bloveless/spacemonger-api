@@ -7,10 +7,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"spacemonger"
-	"spacemonger/spacetrader"
 	"testing"
 	"time"
+
+	"spacemonger"
+	"spacemonger/spacetrader"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -26,7 +27,8 @@ type DbTestSuite struct {
 }
 
 func (suite *DbTestSuite) SetupSuite() {
-	pgpool, err := pgxpool.Connect(context.Background(), fmt.Sprintf("postgres://spacemonger_test:Testing123@localhost:5433/spacemonger_test?sslmode=disable"))
+	connString := "postgres://spacemonger_test:Testing123@localhost:5433/spacemonger_test?sslmode=disable"
+	pgpool, err := pgxpool.Connect(context.Background(), connString)
 	if err != nil {
 		suite.FailNow("Failed trying to create postgres pool", err)
 	}
@@ -36,7 +38,7 @@ func (suite *DbTestSuite) SetupSuite() {
 		log.Fatalf("Unable to determine working directory: %s", err)
 	}
 
-	mig, err := migrate.New(fmt.Sprintf("file://%s/migrations", filepath.Dir(wd)), fmt.Sprintf("postgres://spacemonger_test:Testing123@localhost:5433/spacemonger_test?sslmode=disable"))
+	mig, err := migrate.New(fmt.Sprintf("file://%s/migrations", filepath.Dir(wd)), connString)
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +60,12 @@ func (suite *DbTestSuite) withTransaction(f func(ctx context.Context, tx pgx.Tx)
 		suite.FailNow("Unable to start test db transaction", err)
 	}
 
-	defer tx.Rollback(ctx)
+	defer func () {
+		err := tx.Rollback(ctx)
+		if err != nil {
+			suite.FailNow("Unable to rollback transaction. Test database may need to be manually cleaned", err)
+		}
+	}()
 	if err != nil {
 		suite.FailNow("Failed to start connection", err)
 	}
