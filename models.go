@@ -1,11 +1,12 @@
 package spacemonger
 
 import (
-	"spacemonger/spacetrader"
 	"time"
+
+	"spacemonger/spacetrader"
 )
 
-type User struct {
+type DbUser struct {
 	Id                string
 	Username          string
 	Token             string
@@ -17,7 +18,7 @@ type User struct {
 	Credits           int
 }
 
-type Location struct {
+type DbLocation struct {
 	System       string
 	SystemName   string
 	Location     string
@@ -28,12 +29,12 @@ type Location struct {
 	CreatedAt    time.Time
 }
 
-type DistanceBetweenLocations struct {
+type DbDistanceBetweenLocations struct {
 	originLocationType string
 	distance           float64
 }
 
-type FlightPlan struct {
+type DbFlightPlan struct {
 	Id                     string
 	UserId                 string
 	ShipId                 string
@@ -47,7 +48,7 @@ type FlightPlan struct {
 	CreatedAt              time.Time
 }
 
-type Route struct {
+type DbRoute struct {
 	PurchaseLocation          string
 	PurchaseLocationType      string
 	SellLocation              string

@@ -96,8 +96,27 @@ type JettisonCargoResponse struct {
 	QuantityRemaining int    `json:"quantityRemaining"`
 }
 
+type PurchaseLocation struct {
+	System   string `json:"system"`
+	Location string `json:"location"`
+	Price    int    `json:"price"`
+}
+
+type ShipForSale struct {
+	ShipType          string             `json:"type"`
+	Class             string             `json:"class"`
+	MaxCargo          int                `json:"maxCargo"`
+	LoadingSpeed      int                `json:"loadingSpeed"`
+	Speed             int                `json:"speed"`
+	Manufacturer      string             `json:"manufacturer"`
+	Plating           int                `json:"plating"`
+	Weapons           int                `json:"weapons"`
+	PurchaseLocations []PurchaseLocation `json:"purchaseLocations"`
+	RestrictedGoods   []string           `json:"restrictedGoods"`
+}
+
 type GetShipsForSaleResponse struct {
-	Ships []Ship `json:"ships"`
+	ShipsForSale []ShipForSale `json:"ships"`
 }
 
 type GetSystemsInfoResponse struct {

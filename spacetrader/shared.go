@@ -14,15 +14,16 @@ type Ship struct {
 	Cargo          []Cargo `json:"cargo"`
 	SpaceAvailable int     `json:"spaceAvailable"`
 	ShipType       string  `json:"type"`
-	Class          string
-	MaxCargo       int    `json:"maxCargo"`
-	Speed          int    `json:"speed"`
-	Manufacturer   string `json:"manufacturer"`
-	Plating        int    `json:"plating"`
-	Weapons        int    `json:"weapons"`
-	X              int    `json:"x"`
-	Y              int    `json:"y"`
-	FlightPlanId   string `json:"flightPlanId"`
+	Class          string  `json:"class"`
+	MaxCargo       int     `json:"maxCargo"`
+	LoadingSpeed   int     `json:"loadingSpeed"`
+	Speed          int     `json:"speed"`
+	Manufacturer   string  `json:"manufacturer"`
+	Plating        int     `json:"plating"`
+	Weapons        int     `json:"weapons"`
+	X              int     `json:"x"`
+	Y              int     `json:"y"`
+	FlightPlanId   string  `json:"flightPlanId"`
 }
 
 type Loan struct {

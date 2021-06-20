@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"spacemonger"
 	"spacemonger/spacetrader"
-	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -50,44 +53,27 @@ func main() {
 		panic(err)
 	}
 
-	rows, err := app.dbPool.Query(context.Background(), "SELECT schema_name FROM information_schema.schemata")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	defer rows.Close()
-	for rows.Next() {
-		schema := ""
-
-		err = rows.Scan(&schema)
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Println(schema)
-	}
-
-	fmt.Println("Daemon Main")
+	log.Println("Daemon Main")
 	c, err := spacetrader.NewClient()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	myIp, err := c.GetMyIpAddress()
+	ctx := context.Background()
+	myIp, err := c.GetMyIpAddress(ctx)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	fmt.Printf("MyIp: %+v\n", myIp)
+	log.Printf("MyIp: %+v\n", myIp)
 
-	status, err := c.GetGameStatus()
+	status, err := c.GetGameStatus(ctx)
 	if errors.Is(err, spacetrader.MaintenanceModeError) {
 		for {
 			log.Println("Detected SpaceTraders API in maintenance mode (status code 503). Sleeping for 60 seconds and trying again")
 			time.Sleep(60*time.Second)
 
-			_, err = c.GetGameStatus()
+			_, err = c.GetGameStatus(ctx)
 			if err == nil || !errors.Is(err, spacetrader.MaintenanceModeError) {
 				break
 			}
@@ -96,69 +82,57 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Printf("Game Status: %+v\n", status)
+	log.Printf("Game Status: %+v\n", status)
 
-	user, err := spacemonger.GetOrCreateUser(app.dbPool, fmt.Sprintf("%s-main", app.config.UsernameBase), "trader")
+	user, err := spacemonger.InitializeUser(ctx, app.dbPool, fmt.Sprintf("%s-main", app.config.UsernameBase), "trader")
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("User %+v\n", user)
-
-
-	// claimedUsername, err := c.ClaimUsername("blove-go-test")
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-
-	// claimedUsername := spacemonger.ClaimUsernameResponse{
-	// 	Token: "3d472a71-33f9-4752-a38c-761db39425c7",
-	// 	User: spacemonger.ClaimUsernameResponseUser{
-	// 		Username: "bloveless-dummy-username-test",
-	// 		Credits:  0,
-	// 		Ships:    []spacemonger.Ship{},
-	// 		Loans:    []spacemonger.Loan{},
-	// 	},
-	// }
-	//
-	// fmt.Printf("New Username: %+v\n", claimedUsername)
-
-	// username := "blove-go-test"
-	token := "c53e4835-d8cc-4579-b7d5-99b1df31bf8e"
-
-	c.SetToken(token)
-
-	myInfo, err := c.GetMyInfo()
-	if err != nil {
-		log.Fatalf("GetMyInfo error: %+v", err)
-	}
-
-	fmt.Printf("GetMyInfo data: %+v\n", myInfo)
-
-	if myInfo.User.Credits == 0 {
-		createLoanResponse, err := c.CreateLoan(spacetrader.StartUpLoan)
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Printf("New Loan: %+v\n", createLoanResponse)
-	}
+	log.Printf("User %+v\n", user)
 
 	killSwitch := make(chan struct{})
 
-	myLoans, err := c.GetMyLoans()
-	if err != nil {
-		panic(err)
-	}
+	// When implementing the ship the ship will have a few layers of strategy. Early on the ship won't know anything
+	// about the market so it will just buy a good from the location it is at and move to the closest location to sell
+	// that good. The ship will harvest market data after it arrives at each location. After the ship harvests data
+	// from both locations then it might be able to make a profitable trade. Try and expand this algorithm to the 3 or 4
+	// closest locations and pick trade routes within those
 
-	fmt.Printf("My Loans: %+v\n", myLoans)
+	ships := make(chan spacemonger.Ship, 1)
 
 	go func() {
-		time.Sleep(10 * time.Second)
-		close(killSwitch)
+		for ship := range ships {
+			ship := ship
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+
+				select {
+				case <-killSwitch:
+					log.Printf("Caught killswitch. Terminating ship %s\n", ship.Id)
+					cancel()
+				case err := <-ship.Run(ctx):
+					log.Printf("Ship terminated of it's own accord: %+v\n", err)
+				}
+			}()
+		}
 	}()
 
-	fmt.Println("Waiting for killswitch signal")
-	<-killSwitch
+	for _, s := range user.Ships {
+		ships <- spacemonger.NewShip(app.dbPool, user, s)
+	}
 
-	fmt.Println("Received killSwitch... Good Bye")
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case <-sigs:
+		log.Println("Caught exit signal. Exiting")
+		close(killSwitch)
+	case <- killSwitch:
+		log.Println("Caught killSwitch. Exiting")
+	}
+
+	// TODO: Do I need a waitgroup wait here to wait until all the ships have finished closing after the killSwitch
+	//       is triggered
 }

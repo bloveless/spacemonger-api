@@ -2,6 +2,7 @@ package spacemonger
 
 import (
 	"context"
+
 	"spacemonger/spacetrader"
 
 	"github.com/jackc/pgconn"
@@ -14,8 +15,8 @@ type DBConn interface {
 	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
 
-func GetUser(ctx context.Context, conn DBConn, username string) (User, error) {
-	u := User{}
+func GetUser(ctx context.Context, conn DBConn, username string) (DbUser, error) {
+	u := DbUser{}
 	err := conn.QueryRow(ctx, `
 		SELECT id::text, username, token, new_ship_assignment, new_ship_system FROM daemon_user
 		WHERE username = $1
@@ -23,13 +24,13 @@ func GetUser(ctx context.Context, conn DBConn, username string) (User, error) {
 	`, username).Scan(&u.Id, &u.Username, &u.Token, &u.NewShipAssignment, &u.NewShipSystem)
 
 	if err != nil {
-		return User{}, err
+		return DbUser{}, err
 	}
 
 	return u, nil
 }
 
-func SaveUser(ctx context.Context, conn DBConn, user User) (User, error) {
+func SaveUser(ctx context.Context, conn DBConn, user DbUser) (DbUser, error) {
 	err := conn.QueryRow(ctx, `
 		INSERT INTO daemon_user (username, token, new_ship_assignment, new_ship_system)
 		VALUES ($1, $2, $3, $4)
@@ -44,8 +45,8 @@ func SaveUser(ctx context.Context, conn DBConn, user User) (User, error) {
 	return user, err
 }
 
-func GetLocation(ctx context.Context, conn DBConn, location string) (Location, error) {
-	l := Location{}
+func GetLocation(ctx context.Context, conn DBConn, location string) (DbLocation, error) {
+	l := DbLocation{}
 	err := conn.QueryRow(ctx, `
 		SELECT
 			 system
@@ -71,13 +72,13 @@ func GetLocation(ctx context.Context, conn DBConn, location string) (Location, e
 	)
 
 	if err != nil {
-		return Location{}, err
+		return DbLocation{}, err
 	}
 
 	return l, nil
 }
 
-func SaveLocation(ctx context.Context, conn DBConn, location Location) error {
+func SaveLocation(ctx context.Context, conn DBConn, location DbLocation) error {
 	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_location (system, system_name, location, location_name, location_type, x, y)
 		VALUES ($1, $2, $3, $4, $5, $6, $7);
@@ -154,8 +155,8 @@ func SaveFlightPlan(ctx context.Context, conn DBConn, userId string, flightPlan 
 	return err
 }
 
-func GetActiveFlightPlan(ctx context.Context, conn DBConn, shipId string) (FlightPlan, error) {
-	r := FlightPlan{}
+func GetActiveFlightPlan(ctx context.Context, conn DBConn, shipId string) (DbFlightPlan, error) {
+	r := DbFlightPlan{}
 	err := conn.QueryRow(ctx, `
 		SELECT
 			 id
@@ -176,14 +177,14 @@ func GetActiveFlightPlan(ctx context.Context, conn DBConn, shipId string) (Fligh
 		shipId,
 	).Scan(&r.Id, &r.ShipId, &r.Origin, &r.Destination, &r.FuelConsumed, &r.FuelRemaining, &r.TimeRemainingInSeconds, &r.CreatedAt, &r.Distance, &r.ArrivesAt, &r.UserId)
 	if err != nil {
-		return FlightPlan{}, err
+		return DbFlightPlan{}, err
 	}
 
 	return r, nil
 }
 
-func GetDistanceBetweenLocations(ctx context.Context, conn DBConn, origin, destination string) (DistanceBetweenLocations, error) {
-	r := DistanceBetweenLocations{}
+func GetDistanceBetweenLocations(ctx context.Context, conn DBConn, origin, destination string) (DbDistanceBetweenLocations, error) {
+	r := DbDistanceBetweenLocations{}
 	err := conn.QueryRow(ctx, `
 		SELECT
 			 dsi1.location_type as origin_location_type
@@ -201,7 +202,7 @@ func GetDistanceBetweenLocations(ctx context.Context, conn DBConn, origin, desti
 	).Scan(&r.originLocationType, &r.distance)
 
 	if err != nil {
-		return DistanceBetweenLocations{}, err
+		return DbDistanceBetweenLocations{}, err
 	}
 
 	return r, nil
@@ -252,8 +253,8 @@ func SaveMarketplaceData(ctx context.Context, conn DBConn, location string, mark
 	return nil
 }
 
-func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, shipSpeed int) ([]Route, error) {
-	var routes []Route
+func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, shipSpeed int) ([]DbRoute, error) {
+	var routes []DbRoute
 
 	rows, err := conn.Query(ctx, `
 		-- calculate the route from each location to each location per good
@@ -282,12 +283,12 @@ func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, sh
 		location,
 	)
 	if err != nil {
-		return []Route{}, err
+		return []DbRoute{}, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		r := Route{}
+		r := DbRoute{}
 		err = rows.Scan(
 			&r.PurchaseLocation,
 			&r.PurchaseLocationType,
@@ -301,7 +302,7 @@ func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, sh
 			&r.VolumePerUnit,
 		)
 		if err != nil {
-			return []Route{}, err
+			return []DbRoute{}, err
 		}
 
 		profit := float64(r.SellPricePerUnit - r.PurchasePricePerUnit)
