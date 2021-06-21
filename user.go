@@ -22,22 +22,18 @@ type User struct {
 	OutstandingLoans int
 	Credits          int
 	Client           spacetrader.Client
+	ShipMessages     chan ShipMessage
 }
 
 // InitializeUser will get or create the user in the db and get the user ready to play. This means that if the user has
 // no money attempt to take out a loan. Maybe if the user doesn't have any ships then we should purchase a ship.
 func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, newShipAssignment string) (User, error) {
 	// Get user from DB
-	client, err := spacetrader.NewClient()
-	if err != nil {
-		return User{}, err
-	}
-
 	dbUser, err := GetUser(ctx, pool, username)
 	if errors.Is(err, pgx.ErrNoRows) {
 		log.Printf("Creating new user: %s\n", username)
 
-		claimedUsername, err := client.ClaimUsername(ctx, username)
+		claimedUsername, err := spacetrader.ClaimUsername(ctx, username)
 		if err != nil {
 			return User{}, err
 		}
@@ -60,12 +56,17 @@ func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, ne
 		return User{}, fmt.Errorf("unknown error occurred: %w", err)
 	}
 
-	client.SetToken(dbUser.Token)
+	client, err := spacetrader.NewClient(dbUser.Token)
+	if err != nil {
+		return User{}, err
+	}
+
 	u := User{
-		Id:       dbUser.Id,
-		Token:    dbUser.Token,
-		Username: dbUser.Username,
-		Client:   client,
+		Id:           dbUser.Id,
+		Token:        dbUser.Token,
+		Username:     dbUser.Username,
+		Client:       client,
+		ShipMessages: make(chan ShipMessage, 10),
 	}
 
 	info, err := client.GetMyInfo(ctx)
@@ -131,6 +132,16 @@ func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, ne
 	}
 
 	return u, nil
+}
+
+func (u *User) ProcessShipMessage(m ShipMessage) error {
+	if m.Type == UpdateCredits {
+		log.Printf("%s -- Updating credits to %d", u.Username, m.NewCredits)
+		u.Credits = m.NewCredits
+		return nil
+	}
+
+	return UnknownShipMessageType
 }
 
 // PurchaseFastestShip will attempt to purchase a new ship for the user. If no ship was able to be purchased then the

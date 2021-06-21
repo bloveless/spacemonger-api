@@ -9,18 +9,20 @@ import (
 )
 
 type Ship struct {
-	dbConn DBConn
-	user User
-	Id string
-	location string
+	dbConn       DBConn
+	user         User
+	Id           string
+	location     string
+	ShipMessages chan ShipMessage
 }
 
 func NewShip(dbConn DBConn, u User, ship spacetrader.Ship) Ship {
-	return Ship {
-		dbConn: dbConn,
-		user: u,
-		Id: ship.Id,
-		location: ship.Location,
+	return Ship{
+		dbConn:       dbConn,
+		user:         u,
+		Id:           ship.Id,
+		location:     ship.Location,
+		ShipMessages: u.ShipMessages,
 	}
 }
 
@@ -42,6 +44,11 @@ func (s Ship) Run(ctx context.Context) <-chan error {
 			}
 
 			log.Printf("%s -- Saved marketplace data for location %s\n", s.user.Username, s.location)
+
+			s.ShipMessages <- ShipMessage{
+				Type:       UpdateCredits,
+				NewCredits: 100000,
+			}
 
 			time.Sleep(60 * time.Second)
 		}

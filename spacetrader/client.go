@@ -28,7 +28,7 @@ type Client struct {
 	token      string
 }
 
-func NewClient() (Client, error) {
+func NewClient(token string) (Client, error) {
 	transport := &http.Transport{}
 
 	envProxy := os.Getenv("HTTP_PROXY")
@@ -46,6 +46,7 @@ func NewClient() (Client, error) {
 			Timeout:   time.Second * 10,
 		},
 		baseUrl: "https://api.spacetraders.io",
+		token: token,
 	}, nil
 }
 
@@ -54,25 +55,15 @@ func (c *Client) SetBaseUrl(base string) {
 	c.baseUrl = base
 }
 
-// SetToken will set the token on the client for a specific user
-func (c *Client) SetToken(token string) {
-	c.token = token
-}
-
-func (c *Client) executeRequest(ctx context.Context, method string, url string, body io.Reader, decodeResponse interface{}) error {
-	fullUrl := url
-	if !strings.Contains(fullUrl, "http://") && !strings.Contains(fullUrl, "https://") {
-		fullUrl = c.baseUrl + url
-	}
-
+func executeRequest(ctx context.Context, client http.Client, method string, fullUrl string, token string, body io.Reader, decodeResponse interface{}) error {
 	request, err := http.NewRequestWithContext(ctx, method, fullUrl, body)
 	if err != nil {
 		return err
 	}
 
 	request.Header.Add("Content-Type", "application/json")
-	if c.token != "" {
-		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.token))
+	if token != "" {
+		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
 	}
 
 	// TODO: To mutex or not to mutex
@@ -87,7 +78,7 @@ func (c *Client) executeRequest(ctx context.Context, method string, url string, 
 			return TooManyRetriesError
 		}
 
-		response, err := c.httpClient.Do(request)
+		response, err := client.Do(request)
 		if err != nil {
 			return err
 		}
@@ -122,7 +113,7 @@ func (c *Client) executeRequest(ctx context.Context, method string, url string, 
 			}
 
 			waitTime := time.Duration(retryAfter*1000) * time.Millisecond
-			log.Printf("Rate limited... waiting for %v seconds before trying again. Request: \"%s %s\"\n", waitTime, method, url)
+			log.Printf("Rate limited... waiting for %v seconds before trying again. Request: \"%s %s\"\n", waitTime, method, fullUrl)
 
 			time.Sleep(waitTime)
 			continue
@@ -141,15 +132,23 @@ func (c *Client) executeRequest(ctx context.Context, method string, url string, 
 		if err != nil {
 			return err
 		}
-
 		return e
 	}
 }
 
+func (c *Client) executeRequest(ctx context.Context, method string, url string, body io.Reader, decodeResponse interface{}) error {
+	fullUrl := url
+	if !strings.Contains(fullUrl, "http://") && !strings.Contains(fullUrl, "https://") {
+		fullUrl = c.baseUrl + url
+	}
+
+	return executeRequest(ctx, c.httpClient, method, fullUrl, c.token, body, decodeResponse)
+}
+
 // GetMyIpAddress will get the clients current external ip address
-func (c *Client) GetMyIpAddress(ctx context.Context) (GetMyIpAddressResponse, error) {
+func GetMyIpAddress(ctx context.Context) (GetMyIpAddressResponse, error) {
 	response := GetMyIpAddressResponse{}
-	err := c.executeRequest(ctx, "GET", "https://api.ipify.org?format=json", nil, &response)
+	err := executeRequest(ctx, http.Client{}, "GET", "https://api.ipify.org?format=json", "", nil, &response)
 	if err != nil {
 		return GetMyIpAddressResponse{}, err
 	}
@@ -158,9 +157,9 @@ func (c *Client) GetMyIpAddress(ctx context.Context) (GetMyIpAddressResponse, er
 }
 
 // ClaimUsername will claim a username and return a token
-func (c *Client) ClaimUsername(ctx context.Context, username string) (ClaimUsernameResponse, error) {
+func ClaimUsername(ctx context.Context, username string) (ClaimUsernameResponse, error) {
 	response := ClaimUsernameResponse{}
-	err := c.executeRequest(ctx, "POST", fmt.Sprintf("/users/%s/token", username), nil, &response)
+	err := executeRequest(ctx, http.Client{}, "POST", fmt.Sprintf("/users/%s/token", username), "", nil, &response)
 	if err != nil {
 		return ClaimUsernameResponse{}, err
 	}
@@ -169,9 +168,9 @@ func (c *Client) ClaimUsername(ctx context.Context, username string) (ClaimUsern
 }
 
 // GetGameStatus will return the current status of https://api.spacetraders.io
-func (c *Client) GetGameStatus(ctx context.Context) (GameStatusResponse, error) {
+func GetGameStatus(ctx context.Context) (GameStatusResponse, error) {
 	response := GameStatusResponse{}
-	err := c.executeRequest(ctx, "GET", "/game/status", nil, &response)
+	err := executeRequest(ctx, http.Client{}, "GET", "/game/status", "", nil, &response)
 	if err != nil {
 		return GameStatusResponse{}, err
 	}

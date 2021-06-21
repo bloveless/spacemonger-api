@@ -53,27 +53,21 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("Daemon Main")
-	c, err := spacetrader.NewClient()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
 	ctx := context.Background()
-	myIp, err := c.GetMyIpAddress(ctx)
+	myIp, err := spacetrader.GetMyIpAddress(ctx)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	log.Printf("MyIp: %+v\n", myIp)
 
-	status, err := c.GetGameStatus(ctx)
+	status, err := spacetrader.GetGameStatus(ctx)
 	if errors.Is(err, spacetrader.MaintenanceModeError) {
 		for {
 			log.Println("Detected SpaceTraders API in maintenance mode (status code 503). Sleeping for 60 seconds and trying again")
-			time.Sleep(60*time.Second)
+			time.Sleep(60 * time.Second)
 
-			_, err = c.GetGameStatus(ctx)
+			_, err = spacetrader.GetGameStatus(ctx)
 			if err == nil || !errors.Is(err, spacetrader.MaintenanceModeError) {
 				break
 			}
@@ -98,7 +92,7 @@ func main() {
 	// from both locations then it might be able to make a profitable trade. Try and expand this algorithm to the 3 or 4
 	// closest locations and pick trade routes within those
 
-	ships := make(chan spacemonger.Ship, 1)
+	ships := make(chan spacemonger.Ship, 10)
 
 	go func() {
 		for ship := range ships {
@@ -118,9 +112,29 @@ func main() {
 		}
 	}()
 
-	for _, s := range user.Ships {
-		ships <- spacemonger.NewShip(app.dbPool, user, s)
-	}
+	go func() {
+		// User will all it's ships to the ships channel
+		for _, s := range user.Ships {
+			ships <- spacemonger.NewShip(app.dbPool, user, s)
+		}
+
+		// Then wait forever to receive a command from one of
+		for {
+			select {
+			case msg := <-user.ShipMessages:
+				err := user.ProcessShipMessage(msg)
+				if errors.Is(err, spacemonger.UnknownShipMessageType) {
+					// If we received an unknown ship message type then this is a developer error
+					// and we need to add handler code for this
+					panic(err)
+				}
+				// TODO: Are there other errors that need to be handled... right now they are just ignored
+			case <-killSwitch:
+				log.Printf("%s -- Received kill switch. Terminating", user.Username)
+				return
+			}
+		}
+	}()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -129,7 +143,7 @@ func main() {
 	case <-sigs:
 		log.Println("Caught exit signal. Exiting")
 		close(killSwitch)
-	case <- killSwitch:
+	case <-killSwitch:
 		log.Println("Caught killSwitch. Exiting")
 	}
 
