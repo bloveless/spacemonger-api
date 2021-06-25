@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"spacemonger/spacetrader"
+	"spacemonger/spacetraders"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -17,23 +17,23 @@ type User struct {
 	Id               string
 	Token            string
 	Username         string
-	Ships            []spacetrader.Ship
-	Loans            []spacetrader.Loan
+	Ships            []spacetraders.Ship
+	Loans            []spacetraders.Loan
 	OutstandingLoans int
 	Credits          int
-	Client           spacetrader.Client
+	Client           spacetraders.AuthorizedClient
 	ShipMessages     chan ShipMessage
 }
 
 // InitializeUser will get or create the user in the db and get the user ready to play. This means that if the user has
 // no money attempt to take out a loan. Maybe if the user doesn't have any ships then we should purchase a ship.
-func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, newShipAssignment string) (User, error) {
+func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpool.Pool, username string, newShipAssignment string) (User, error) {
 	// Get user from DB
 	dbUser, err := GetUser(ctx, pool, username)
 	if errors.Is(err, pgx.ErrNoRows) {
 		log.Printf("Creating new user: %s\n", username)
 
-		claimedUsername, err := spacetrader.ClaimUsername(ctx, username)
+		claimedUsername, err := client.ClaimUsername(ctx, username)
 		if err != nil {
 			return User{}, err
 		}
@@ -52,11 +52,11 @@ func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, ne
 
 		log.Printf("New user persisted: %s\n", username)
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return User{}, fmt.Errorf("unknown error occurred: %w", err)
 	}
 
-	client, err := spacetrader.NewClient(dbUser.Token)
+	authorizedClient, err := spacetraders.NewAuthorizedClient(client, dbUser.Token)
 	if err != nil {
 		return User{}, err
 	}
@@ -65,17 +65,17 @@ func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, ne
 		Id:           dbUser.Id,
 		Token:        dbUser.Token,
 		Username:     dbUser.Username,
-		Client:       client,
+		Client:       authorizedClient,
 		ShipMessages: make(chan ShipMessage, 10),
 	}
 
-	info, err := client.GetMyInfo(ctx)
+	info, err := u.Client.GetMyInfo(ctx)
 	if err != nil {
 		return User{}, err
 	}
 	u.Credits = info.User.Credits
 
-	loans, err := client.GetMyLoans(ctx)
+	loans, err := u.Client.GetMyLoans(ctx)
 	if err != nil {
 		return User{}, err
 	}
@@ -89,7 +89,7 @@ func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, ne
 	}
 	u.OutstandingLoans = outstandingLoans
 
-	ships, err := client.GetMyShips(ctx)
+	ships, err := u.Client.GetMyShips(ctx)
 	if err != nil {
 		return User{}, err
 	}
@@ -103,7 +103,7 @@ func InitializeUser(ctx context.Context, pool *pgxpool.Pool, username string, ne
 	u.Ships = ships.Ships
 
 	if u.Credits == 0 {
-		createLoanResponse, err := u.Client.CreateLoan(ctx, spacetrader.StartUpLoan)
+		createLoanResponse, err := u.Client.CreateLoan(ctx, spacetraders.StartUpLoan)
 		if err != nil {
 			return User{}, err
 		}
@@ -171,7 +171,8 @@ func PurchaseFastestShip(ctx context.Context, u User, system string) (User, erro
 	fastestShipSpeed := 0
 	fastestShipPrice := 0
 	fastestShipLocation := ""
-	var fastestShip *spacetrader.ShipForSale
+	fastestShipType := ""
+	foundShip := false
 
 	for _, availableShip := range availableShips.ShipsForSale {
 		for _, purchaseLocation := range availableShip.PurchaseLocations {
@@ -199,19 +200,20 @@ func PurchaseFastestShip(ctx context.Context, u User, system string) (User, erro
 				continue
 			}
 
+			foundShip = true
 			fastestShipSpeed = availableShip.Speed
-			fastestShip = &availableShip
+			fastestShipType = availableShip.ShipType
 			fastestShipLocation = purchaseLocation.Location
 			fastestShipPrice = purchaseLocation.Price
 		}
 	}
 
-	if fastestShip == nil {
+	if foundShip == false {
 		return u, fmt.Errorf("%s -- unable to find a ship for the user to purchase", u.Username)
 	}
 
-	log.Printf("%s -- Buying ship %s for %d at location %s\n", u.Username, fastestShip.ShipType, fastestShipPrice, fastestShipLocation)
-	s, err := u.Client.PurchaseShip(ctx, fastestShipLocation, fastestShip.ShipType)
+	log.Printf("%s -- Buying ship %s for %d at location %s\n", u.Username, fastestShipType, fastestShipPrice, fastestShipLocation)
+	s, err := u.Client.PurchaseShip(ctx, fastestShipLocation, fastestShipType)
 	if err != nil {
 		return u, err
 	}

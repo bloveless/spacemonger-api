@@ -1,4 +1,4 @@
-package spacetrader
+package spacetraders
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -24,11 +23,10 @@ var httpMutex sync.Mutex
 
 type Client struct {
 	httpClient http.Client
-	baseUrl    string
-	token      string
+	baseURL    string
 }
 
-func NewClient(token string) (Client, error) {
+func NewClient() (Client, error) {
 	transport := &http.Transport{}
 
 	envProxy := os.Getenv("HTTP_PROXY")
@@ -45,18 +43,12 @@ func NewClient(token string) (Client, error) {
 			Transport: transport,
 			Timeout:   time.Second * 10,
 		},
-		baseUrl: "https://api.spacetraders.io",
-		token: token,
+		baseURL: "https://api.spacetraders.io",
 	}, nil
 }
 
-// SetBaseUrl will override the default base url of https://api.spacetraders.io. This is only used for testing.
-func (c *Client) SetBaseUrl(base string) {
-	c.baseUrl = base
-}
-
-func executeRequest(ctx context.Context, client http.Client, method string, fullUrl string, token string, body io.Reader, decodeResponse interface{}) error {
-	request, err := http.NewRequestWithContext(ctx, method, fullUrl, body)
+func executeRequest(ctx context.Context, client Client, method string, url string, token string, body io.Reader, decodeResponse interface{}) error {
+	request, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return err
 	}
@@ -78,7 +70,7 @@ func executeRequest(ctx context.Context, client http.Client, method string, full
 			return TooManyRetriesError
 		}
 
-		response, err := client.Do(request)
+		response, err := client.httpClient.Do(request)
 		if err != nil {
 			return err
 		}
@@ -113,7 +105,7 @@ func executeRequest(ctx context.Context, client http.Client, method string, full
 			}
 
 			waitTime := time.Duration(retryAfter*1000) * time.Millisecond
-			log.Printf("Rate limited... waiting for %v seconds before trying again. Request: \"%s %s\"\n", waitTime, method, fullUrl)
+			log.Printf("Rate limited... waiting for %v seconds before trying again. Request: \"%s %s\"\n", waitTime, method, url)
 
 			time.Sleep(waitTime)
 			continue
@@ -136,19 +128,14 @@ func executeRequest(ctx context.Context, client http.Client, method string, full
 	}
 }
 
-func (c *Client) executeRequest(ctx context.Context, method string, url string, body io.Reader, decodeResponse interface{}) error {
-	fullUrl := url
-	if !strings.Contains(fullUrl, "http://") && !strings.Contains(fullUrl, "https://") {
-		fullUrl = c.baseUrl + url
-	}
-
-	return executeRequest(ctx, c.httpClient, method, fullUrl, c.token, body, decodeResponse)
+func (c *Client) SetBaseURL(baseURL string) {
+	c.baseURL = baseURL
 }
 
 // GetMyIpAddress will get the clients current external ip address
-func GetMyIpAddress(ctx context.Context) (GetMyIpAddressResponse, error) {
+func (c Client) GetMyIpAddress(ctx context.Context) (GetMyIpAddressResponse, error) {
 	response := GetMyIpAddressResponse{}
-	err := executeRequest(ctx, http.Client{}, "GET", "https://api.ipify.org?format=json", "", nil, &response)
+	err := executeRequest(ctx, c, "GET", "https://api.ipify.org?format=json", "", nil, &response)
 	if err != nil {
 		return GetMyIpAddressResponse{}, err
 	}
@@ -157,9 +144,9 @@ func GetMyIpAddress(ctx context.Context) (GetMyIpAddressResponse, error) {
 }
 
 // ClaimUsername will claim a username and return a token
-func ClaimUsername(ctx context.Context, username string) (ClaimUsernameResponse, error) {
+func (c Client) ClaimUsername(ctx context.Context, username string) (ClaimUsernameResponse, error) {
 	response := ClaimUsernameResponse{}
-	err := executeRequest(ctx, http.Client{}, "POST", fmt.Sprintf("/users/%s/token", username), "", nil, &response)
+	err := executeRequest(ctx, c, "POST", c.baseURL+fmt.Sprintf("/users/%s/token", username), "", nil, &response)
 	if err != nil {
 		return ClaimUsernameResponse{}, err
 	}
@@ -168,9 +155,9 @@ func ClaimUsername(ctx context.Context, username string) (ClaimUsernameResponse,
 }
 
 // GetGameStatus will return the current status of https://api.spacetraders.io
-func GetGameStatus(ctx context.Context) (GameStatusResponse, error) {
+func (c Client) GetGameStatus(ctx context.Context) (GameStatusResponse, error) {
 	response := GameStatusResponse{}
-	err := executeRequest(ctx, http.Client{}, "GET", "/game/status", "", nil, &response)
+	err := executeRequest(ctx, c, "GET", c.baseURL+"/game/status", "", nil, &response)
 	if err != nil {
 		return GameStatusResponse{}, err
 	}
@@ -178,14 +165,31 @@ func GetGameStatus(ctx context.Context) (GameStatusResponse, error) {
 	return response, nil
 }
 
+type AuthorizedClient struct {
+	client Client
+	token  string
+}
+
+func NewAuthorizedClient(client Client, token string) (AuthorizedClient, error) {
+	client, err := NewClient()
+	if err != nil {
+		return AuthorizedClient{}, err
+	}
+
+	return AuthorizedClient{
+		client,
+		token,
+	}, nil
+}
+
 // ////////////////////////////////////////////
 // /// ACCOUNT
 // ////////////////////////////////////////////
 
 // GetMyInfo returns the current users info
-func (c *Client) GetMyInfo(ctx context.Context) (GetMyInfoResponse, error) {
+func (ac AuthorizedClient) GetMyInfo(ctx context.Context) (GetMyInfoResponse, error) {
 	r := GetMyInfoResponse{}
-	err := c.executeRequest(ctx, "GET", "/my/account", nil, &r)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+"/my/account", ac.token, nil, &r)
 	if err != nil {
 		return GetMyInfoResponse{}, err
 	}
@@ -197,9 +201,9 @@ func (c *Client) GetMyInfo(ctx context.Context) (GetMyInfoResponse, error) {
 // /// FLIGHT PLANS
 // ////////////////////////////////////////////
 
-func (c *Client) GetFlightPlan(ctx context.Context, flightPlanId string) (GetFlightPlanResponse, error) {
+func (ac AuthorizedClient) GetFlightPlan(ctx context.Context, flightPlanId string) (GetFlightPlanResponse, error) {
 	response := GetFlightPlanResponse{}
-	err := c.executeRequest(ctx, "GET", fmt.Sprintf("/my/flight-plans/%s", flightPlanId), nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/my/flight-plans/%s", flightPlanId), ac.token, nil, &response)
 
 	if err != nil {
 		return GetFlightPlanResponse{}, err
@@ -208,7 +212,7 @@ func (c *Client) GetFlightPlan(ctx context.Context, flightPlanId string) (GetFli
 	return response, nil
 }
 
-func (c *Client) CreateFlightPlan(ctx context.Context, shipId, destination string) (CreateFlightPlanResponse, error) {
+func (ac AuthorizedClient) CreateFlightPlan(ctx context.Context, shipId, destination string) (CreateFlightPlanResponse, error) {
 	request := CreateFlightPlanRequest{
 		ShipId:      shipId,
 		Destination: destination,
@@ -219,7 +223,7 @@ func (c *Client) CreateFlightPlan(ctx context.Context, shipId, destination strin
 	}
 
 	response := CreateFlightPlanResponse{}
-	err = c.executeRequest(ctx, "POST", "/my/flight-plans", bytes.NewReader(requestJson), &response)
+	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+"/my/flight-plans", ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
 		return CreateFlightPlanResponse{}, err
 	}
@@ -237,9 +241,9 @@ func (c *Client) CreateFlightPlan(ctx context.Context, shipId, destination strin
 // /// LOANS
 // ////////////////////////////////////////////
 
-func (c *Client) GetMyLoans(ctx context.Context) (GetMyLoansResponse, error) {
+func (ac AuthorizedClient) GetMyLoans(ctx context.Context) (GetMyLoansResponse, error) {
 	response := GetMyLoansResponse{}
-	err := c.executeRequest(ctx, "GET", "/my/loans", nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+"/my/loans", ac.token, nil, &response)
 	if err != nil {
 		return GetMyLoansResponse{}, err
 	}
@@ -247,10 +251,10 @@ func (c *Client) GetMyLoans(ctx context.Context) (GetMyLoansResponse, error) {
 	return response, nil
 }
 
-func (c *Client) PayOffLoan(ctx context.Context, loanId string) (PayOffLoanResponse, error) {
+func (ac AuthorizedClient) PayOffLoan(ctx context.Context, loanId string) (PayOffLoanResponse, error) {
 	response := PayOffLoanResponse{}
 	// TODO: If this request doesn't work then it likely needs a body of any valid json payload
-	err := c.executeRequest(ctx, "PUT", fmt.Sprintf("/my/loans/%s", loanId), nil, &response)
+	err := executeRequest(ctx, ac.client, "PUT", ac.client.baseURL+fmt.Sprintf("/my/loans/%s", loanId), ac.token, nil, &response)
 	if err != nil {
 		return PayOffLoanResponse{}, err
 	}
@@ -258,7 +262,7 @@ func (c *Client) PayOffLoan(ctx context.Context, loanId string) (PayOffLoanRespo
 	return response, nil
 }
 
-func (c *Client) CreateLoan(ctx context.Context, loanType string) (CreateLoanResponse, error) {
+func (ac AuthorizedClient) CreateLoan(ctx context.Context, loanType string) (CreateLoanResponse, error) {
 	request := CreateLoanRequest{
 		LoanType: loanType,
 	}
@@ -270,7 +274,7 @@ func (c *Client) CreateLoan(ctx context.Context, loanType string) (CreateLoanRes
 	log.Printf("requestJson %+v\n", string(requestJson))
 
 	response := CreateLoanResponse{}
-	err = c.executeRequest(ctx, "POST", "/my/loans", bytes.NewReader(requestJson), &response)
+	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+"/my/loans", ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
 		return CreateLoanResponse{}, err
 	}
@@ -282,9 +286,9 @@ func (c *Client) CreateLoan(ctx context.Context, loanType string) (CreateLoanRes
 // /// LOCATIONS
 // ////////////////////////////////////////////
 
-func (c *Client) GetLocation(ctx context.Context, location string) (GetLocationResponse, error) {
+func (ac AuthorizedClient) GetLocation(ctx context.Context, location string) (GetLocationResponse, error) {
 	response := GetLocationResponse{}
-	err := c.executeRequest(ctx, "GET", fmt.Sprintf("/locations/%s", location), nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/locations/%s", location), ac.token, nil, &response)
 	if err != nil {
 		return GetLocationResponse{}, err
 	}
@@ -292,9 +296,9 @@ func (c *Client) GetLocation(ctx context.Context, location string) (GetLocationR
 	return response, nil
 }
 
-func (c *Client) GetLocationMarketplace(ctx context.Context, location string) (GetLocationMarketplaceResponse, error) {
+func (ac AuthorizedClient) GetLocationMarketplace(ctx context.Context, location string) (GetLocationMarketplaceResponse, error) {
 	response := GetLocationMarketplaceResponse{}
-	err := c.executeRequest(ctx, "GET", fmt.Sprintf("/locations/%s/marketplace", location), nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/locations/%s/marketplace", location), ac.token, nil, &response)
 	if err != nil {
 		return GetLocationMarketplaceResponse{}, err
 	}
@@ -308,7 +312,7 @@ func (c *Client) GetLocationMarketplace(ctx context.Context, location string) (G
 // /// PURCHASE ORDERS
 // ////////////////////////////////////////////
 
-func (c *Client) CreatePurchaseOrder(ctx context.Context, shipId, good string, quantity int) (CreatePurchaseOrderResponse, error) {
+func (ac AuthorizedClient) CreatePurchaseOrder(ctx context.Context, shipId, good string, quantity int) (CreatePurchaseOrderResponse, error) {
 	request := CreatePurchaseOrderRequest{
 		ShipId:   shipId,
 		Good:     good,
@@ -320,7 +324,7 @@ func (c *Client) CreatePurchaseOrder(ctx context.Context, shipId, good string, q
 	}
 
 	response := CreatePurchaseOrderResponse{}
-	err = c.executeRequest(ctx, "POST", "my/purchase-orders", bytes.NewReader(requestJson), &response)
+	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+"/my/purchase-orders", ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
 		return CreatePurchaseOrderResponse{}, err
 	}
@@ -332,7 +336,7 @@ func (c *Client) CreatePurchaseOrder(ctx context.Context, shipId, good string, q
 // /// SELL ORDERS
 // ////////////////////////////////////////////
 
-func (c *Client) CreateSellOrder(ctx context.Context, shipId, good string, quantity int) (CreateSellOrderResponse, error) {
+func (ac AuthorizedClient) CreateSellOrder(ctx context.Context, shipId, good string, quantity int) (CreateSellOrderResponse, error) {
 	request := CreateSellOrderRequest{
 		ShipId:   shipId,
 		Good:     good,
@@ -344,7 +348,7 @@ func (c *Client) CreateSellOrder(ctx context.Context, shipId, good string, quant
 	}
 
 	response := CreateSellOrderResponse{}
-	err = c.executeRequest(ctx, "POST", "/my/sell-orders", bytes.NewReader(requestJson), &response)
+	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+"/my/sell-orders", ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
 		return CreateSellOrderResponse{}, err
 	}
@@ -356,7 +360,7 @@ func (c *Client) CreateSellOrder(ctx context.Context, shipId, good string, quant
 // /// SHIPS
 // ////////////////////////////////////////////
 
-func (c *Client) PurchaseShip(ctx context.Context, location, shipType string) (PurchaseShipResponse, error) {
+func (ac AuthorizedClient) PurchaseShip(ctx context.Context, location, shipType string) (PurchaseShipResponse, error) {
 	request := PurchaseShipRequest{
 		Location: location,
 		ShipType: shipType,
@@ -367,7 +371,7 @@ func (c *Client) PurchaseShip(ctx context.Context, location, shipType string) (P
 	}
 
 	response := PurchaseShipResponse{}
-	err = c.executeRequest(ctx, "POST", "/my/ships", bytes.NewReader(requestJson), &response)
+	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+"/my/ships", ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
 		return PurchaseShipResponse{}, nil
 	}
@@ -375,9 +379,9 @@ func (c *Client) PurchaseShip(ctx context.Context, location, shipType string) (P
 	return response, nil
 }
 
-func (c *Client) GetMyShip(ctx context.Context, shipId string) (GetMyShipRequest, error) {
+func (ac AuthorizedClient) GetMyShip(ctx context.Context, shipId string) (GetMyShipRequest, error) {
 	response := GetMyShipRequest{}
-	err := c.executeRequest(ctx, "GET", fmt.Sprintf("/my/ships/%s", shipId), nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/my/ships/%s", shipId), ac.token, nil, &response)
 	if err != nil {
 		return GetMyShipRequest{}, nil
 	}
@@ -385,9 +389,9 @@ func (c *Client) GetMyShip(ctx context.Context, shipId string) (GetMyShipRequest
 	return response, nil
 }
 
-func (c *Client) GetMyShips(ctx context.Context) (GetMyShipsResponse, error) {
+func (ac AuthorizedClient) GetMyShips(ctx context.Context) (GetMyShipsResponse, error) {
 	response := GetMyShipsResponse{}
-	err := c.executeRequest(ctx, "GET", "/my/ships", nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+"/my/ships", ac.token, nil, &response)
 	if err != nil {
 		return GetMyShipsResponse{}, nil
 	}
@@ -395,7 +399,7 @@ func (c *Client) GetMyShips(ctx context.Context) (GetMyShipsResponse, error) {
 	return response, nil
 }
 
-func (c *Client) JettisonCargo(ctx context.Context, shipId string, good string, quantity int) (JettisonCargoResponse, error) {
+func (ac AuthorizedClient) JettisonCargo(ctx context.Context, shipId string, good string, quantity int) (JettisonCargoResponse, error) {
 	request := JettisonCargoRequest{
 		Good:     good,
 		Quantity: quantity,
@@ -406,7 +410,7 @@ func (c *Client) JettisonCargo(ctx context.Context, shipId string, good string, 
 	}
 
 	response := JettisonCargoResponse{}
-	err = c.executeRequest(ctx, "POST", fmt.Sprintf("/my/ships/%s/jettison", shipId), bytes.NewReader(requestJson), &response)
+	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+fmt.Sprintf("/my/ships/%s/jettison", shipId), ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
 		return JettisonCargoResponse{}, err
 	}
@@ -433,9 +437,9 @@ func (c *Client) JettisonCargo(ctx context.Context, shipId string, good string, 
 // /// SYSTEMS
 // ////////////////////////////////////////////
 
-func (c *Client) GetShipsForSale(ctx context.Context) (GetShipsForSaleResponse, error) {
+func (ac AuthorizedClient) GetShipsForSale(ctx context.Context) (GetShipsForSaleResponse, error) {
 	response := GetShipsForSaleResponse{}
-	err := c.executeRequest(ctx, "GET", "/game/ships", nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+"/game/ships", ac.token, nil, &response)
 	if err != nil {
 		return GetShipsForSaleResponse{}, err
 	}
@@ -447,18 +451,18 @@ func (c *Client) GetShipsForSale(ctx context.Context) (GetShipsForSaleResponse, 
 
 // TODO: Get all active flight plans in the system.
 // TODO: Get info on a system's docked ships
-// TODO: Get location info for a system
-// TODO: Get systems info
 
-func (c *Client) GetSystemsInfo(ctx context.Context) (GetSystemsInfoResponse, error) {
-	response := GetSystemsInfoResponse{}
-	err := c.executeRequest(ctx, "GET", "/game/systems", nil, &response)
+func (ac AuthorizedClient) GetSystemLocations(ctx context.Context, system string) (GetSystemLocationsResponse, error) {
+	response := GetSystemLocationsResponse{}
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/systems/%s/locations", system), ac.token, nil, &response)
 	if err != nil {
-		return GetSystemsInfoResponse{}, nil
+		return GetSystemLocationsResponse{}, nil
 	}
 
 	return response, nil
 }
+
+// TODO: Get systems info
 
 // ////////////////////////////////////////////
 // /// TYPES
@@ -466,9 +470,9 @@ func (c *Client) GetSystemsInfo(ctx context.Context) (GetSystemsInfoResponse, er
 
 // TODO: Get available goods
 
-func (c *Client) GetAvailableLoans(ctx context.Context) (GetAvailableLoansResponse, error) {
+func (ac AuthorizedClient) GetAvailableLoans(ctx context.Context) (GetAvailableLoansResponse, error) {
 	response := GetAvailableLoansResponse{}
-	err := c.executeRequest(ctx, "GET", "/types/loans", nil, &response)
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+"/types/loans", ac.token, nil, &response)
 	if err != nil {
 		return GetAvailableLoansResponse{}, err
 	}
@@ -483,7 +487,7 @@ func (c *Client) GetAvailableLoans(ctx context.Context) (GetAvailableLoansRespon
 // /// WARP JUMP
 // ////////////////////////////////////////////
 
-func (c *Client) WarpJump(ctx context.Context, shipId string) (WarpJumpResponse, error) {
+func (ac AuthorizedClient) WarpJump(ctx context.Context, shipId string) (WarpJumpResponse, error) {
 	request := WarpJumpRequest{
 		ShipId: shipId,
 	}
@@ -493,7 +497,7 @@ func (c *Client) WarpJump(ctx context.Context, shipId string) (WarpJumpResponse,
 	}
 
 	response := WarpJumpResponse{}
-	err = c.executeRequest(ctx, "POST", "/my/warp-jumps", bytes.NewReader(requestJson), &response)
+	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+"/my/warp-jumps", ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
 		return WarpJumpResponse{}, err
 	}

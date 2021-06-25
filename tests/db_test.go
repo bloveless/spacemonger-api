@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"spacemonger"
-	"spacemonger/spacetrader"
+	"spacemonger/spacetraders"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -51,6 +51,8 @@ func (suite *DbTestSuite) SetupSuite() {
 	suite.pgpool = pgpool
 }
 
+// Idea adapted from this comment on github
+// https://github.com/jackc/pgx/issues/697#issuecomment-604035545
 func (suite *DbTestSuite) withTransaction(f func(ctx context.Context, tx pgx.Tx)) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -60,15 +62,12 @@ func (suite *DbTestSuite) withTransaction(f func(ctx context.Context, tx pgx.Tx)
 		suite.FailNow("Unable to start test db transaction", err)
 	}
 
-	defer func () {
+	defer func() {
 		err := tx.Rollback(ctx)
 		if err != nil {
 			suite.FailNow("Unable to rollback transaction. Test database may need to be manually cleaned", err)
 		}
 	}()
-	if err != nil {
-		suite.FailNow("Failed to start connection", err)
-	}
 
 	f(ctx, tx)
 }
@@ -98,14 +97,14 @@ func (suite *DbTestSuite) TestGetUser() {
 
 func (suite *DbTestSuite) TestSaveMarketplaceData() {
 	suite.withTransaction(func(ctx context.Context, tx pgx.Tx) {
-		m := spacetrader.MarketplaceData{
+		m := spacetraders.MarketplaceData{
 			Good:                 "METALS",
 			VolumePerUnit:        1,
 			PurchasePricePerUnit: 10,
 			SellPricePerUnit:     9,
 			QuantityAvailable:    1000,
 		}
-		m2 := spacetrader.MarketplaceData{
+		m2 := spacetraders.MarketplaceData{
 			Good:                 "METALS",
 			VolumePerUnit:        2,
 			PurchasePricePerUnit: 20,
@@ -124,12 +123,12 @@ func (suite *DbTestSuite) TestSaveMarketplaceData() {
 		}
 
 		type marketplace struct {
-			location string
-			good string
+			location             string
+			good                 string
 			purchasePricePerUnit int
-			sellPricePerUnit int
-			volumePerUnit int
-			quantityAvailable int
+			sellPricePerUnit     int
+			volumePerUnit        int
+			quantityAvailable    int
 		}
 
 		var marketplaceRows []marketplace
@@ -159,20 +158,20 @@ func (suite *DbTestSuite) TestSaveMarketplaceData() {
 
 		expectedMarketplaceRows := []marketplace{
 			{
-				location: "location1",
-				good: "METALS",
-				volumePerUnit: 1,
+				location:             "location1",
+				good:                 "METALS",
+				volumePerUnit:        1,
 				purchasePricePerUnit: 10,
-				sellPricePerUnit: 9,
-				quantityAvailable: 1000,
+				sellPricePerUnit:     9,
+				quantityAvailable:    1000,
 			},
 			{
-				location: "location1",
-				good: "METALS",
-				volumePerUnit: 2,
+				location:             "location1",
+				good:                 "METALS",
+				volumePerUnit:        2,
 				purchasePricePerUnit: 20,
-				sellPricePerUnit: 18,
-				quantityAvailable: 2000,
+				sellPricePerUnit:     18,
+				quantityAvailable:    2000,
 			},
 		}
 
@@ -205,12 +204,12 @@ func (suite *DbTestSuite) TestSaveMarketplaceData() {
 
 		expectedMarketplaceLatestRows := []marketplace{
 			{
-				location: "location1",
-				good: "METALS",
-				volumePerUnit: 2,
+				location:             "location1",
+				good:                 "METALS",
+				volumePerUnit:        2,
 				purchasePricePerUnit: 20,
-				sellPricePerUnit: 18,
-				quantityAvailable: 2000,
+				sellPricePerUnit:     18,
+				quantityAvailable:    2000,
 			},
 		}
 
@@ -241,17 +240,17 @@ func (suite *DbTestSuite) TestGetRoutesFromLocation() {
 
 		expectedRoutes := []spacemonger.DbRoute{
 			{
-				PurchaseLocation: "location1",
-				PurchaseLocationType: "PLANET",
-				SellLocation: "location2",
-				Good: "METALS",
-				Distance: 28.284271247461902,
-				PurchaseLocationQuantity: 1000,
-				SellLocationQuantity: 2000,
-				PurchasePricePerUnit: 10,
-				SellPricePerUnit: 13,
-				VolumePerUnit: 1,
-				CostVolumeDistance: 0.10606601717798213,
+				PurchaseLocation:          "location1",
+				PurchaseLocationType:      "PLANET",
+				SellLocation:              "location2",
+				Good:                      "METALS",
+				Distance:                  28.284271247461902,
+				PurchaseLocationQuantity:  1000,
+				SellLocationQuantity:      2000,
+				PurchasePricePerUnit:      10,
+				SellPricePerUnit:          13,
+				VolumePerUnit:             1,
+				CostVolumeDistance:        0.10606601717798213,
 				ProfitSpeedVolumeDistance: 0.31819805153394637,
 			},
 		}

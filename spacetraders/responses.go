@@ -1,4 +1,4 @@
-package spacetrader
+package spacetraders
 
 import "time"
 
@@ -119,8 +119,19 @@ type GetShipsForSaleResponse struct {
 	ShipsForSale []ShipForSale `json:"ships"`
 }
 
-type GetSystemsInfoResponse struct {
-	Systems []System `json:"systems"`
+type SystemLocation struct {
+	Symbol             string   `json:"symbol"`
+	SystemLocationType string   `json:"type"`
+	Name               string   `json:"name"`
+	X                  int      `json:"x"`
+	Y                  int      `json:"y"`
+	AllowsConstruction bool     `json:"allowsConstruction"`
+	Traits             []string `json:"traits"`
+	Messages           []string `json:"messages"`
+}
+
+type GetSystemLocationsResponse struct {
+	Locations []SystemLocation `json:"locations"`
 }
 
 type AvailableLoan struct {

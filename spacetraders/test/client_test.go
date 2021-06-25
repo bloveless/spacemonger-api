@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"spacemonger/spacetrader"
+	"spacemonger/spacetraders"
 )
 
 func TestInvalidJsonResponse(t *testing.T) {
@@ -19,16 +19,15 @@ func TestInvalidJsonResponse(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.NewClient()
+	c, err := spacetraders.NewClient()
 	if err != nil {
-		t.Fail()
-		return
+		t.Fatalf("Unable to create spacetraders client: %v", err)
 	}
 
-	c.SetBaseUrl(ts.URL)
+	c.SetBaseURL(ts.URL)
 
 	_, err = c.GetGameStatus(context.Background())
-	if !errors.Is(err, spacetrader.UnableToDecodeResponseError) {
+	if !errors.Is(err, spacetraders.UnableToDecodeResponseError) {
 		t.Fatalf("Expected an UnableToDecodeResponseError error")
 	}
 }
@@ -41,13 +40,12 @@ func TestReceiveSpaceTraderApiError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.NewClient()
+	c, err := spacetraders.NewClient()
 	if err != nil {
-		t.Fail()
-		return
+		t.Fatalf("Unable to create spacetraders client: %v", err)
 	}
 
-	c.SetBaseUrl(ts.URL)
+	c.SetBaseURL(ts.URL)
 
 	_, err = c.GetGameStatus(context.Background())
 	if err == nil {
@@ -72,13 +70,12 @@ func TestRetryRateLimitFailThenSucceed(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.NewClient()
+	c, err := spacetraders.NewClient()
 	if err != nil {
-		t.Fail()
-		return
+		t.Fatalf("Unable to create spacetraders client: %v", err)
 	}
 
-	c.SetBaseUrl(ts.URL)
+	c.SetBaseURL(ts.URL)
 
 	_, err = c.GetGameStatus(context.Background())
 	if err != nil {
@@ -95,13 +92,12 @@ func TestRetryRateLimitAlwaysFail(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.NewClient()
+	c, err := spacetraders.NewClient()
 	if err != nil {
-		t.Fail()
-		return
+		t.Fatalf("Unable to create spacetraders client: %v", err)
 	}
 
-	c.SetBaseUrl(ts.URL)
+	c.SetBaseURL(ts.URL)
 
 	_, err = c.GetGameStatus(context.Background())
 	if err == nil {
@@ -126,13 +122,12 @@ func TestInternalServerFailureThenSucceed(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.NewClient()
+	c, err := spacetraders.NewClient()
 	if err != nil {
-		t.Fail()
-		return
+		t.Fatalf("Unable to create spacetraders client: %v", err)
 	}
 
-	c.SetBaseUrl(ts.URL)
+	c.SetBaseURL(ts.URL)
 
 	_, err = c.GetGameStatus(context.Background())
 	if err != nil {
@@ -148,16 +143,15 @@ func TestInternalServerFailureAlwaysFail(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.NewClient()
+	c, err := spacetraders.NewClient()
 	if err != nil {
-		t.Fail()
-		return
+		t.Fatalf("Unable to create spacetraders client: %v", err)
 	}
 
-	c.SetBaseUrl(ts.URL)
+	c.SetBaseURL(ts.URL)
 
 	_, err = c.GetGameStatus(context.Background())
-	if !errors.Is(err, spacetrader.TooManyRetriesError) {
+	if !errors.Is(err, spacetraders.TooManyRetriesError) {
 		t.Fatalf("Expected request to be retried and then fail with TooManyRetriesError")
 	}
 }
@@ -170,13 +164,12 @@ func TestGetServerStatus(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c, err := spacetrader.NewClient()
+	c, err := spacetraders.NewClient()
 	if err != nil {
-		t.Fail()
-		return
+		t.Fatalf("Unable to create spacetraders client: %v", err)
 	}
 
-	c.SetBaseUrl(ts.URL)
+	c.SetBaseURL(ts.URL)
 
 	gs, err := c.GetGameStatus(context.Background())
 	if err != nil {

@@ -1,4 +1,4 @@
-package spacetrader
+package spacetraders
 
 import "time"
 
@@ -80,23 +80,4 @@ type OrderData struct {
 	Quantity     int    `json:"quantity"`
 	PricePerUnit int    `json:"pricePerUnit"`
 	Total        int    `json:"total"`
-}
-
-type SystemLocation struct {
-	Symbol             string      `json:"symbol"`
-	SystemLocationType string      `json:"type"`
-	Name               string      `json:"name"`
-	X                  int         `json:"x"`
-	Y                  int         `json:"y"`
-	AnsibleProgress    float64     `json:"ansibleProgress"`
-	Anomaly            string      `json:"anomaly"`
-	Structures         []Structure `json:"structures"`
-	Messages           []string    `json:"messages"`
-	AllowsConstruction bool        `json:"allowsConstruction"`
-}
-
-type System struct {
-	Symbol    string           `json:"symbol"`
-	Name      string           `json:"name"`
-	Locations []SystemLocation `json:"locations"`
 }

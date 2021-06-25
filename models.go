@@ -3,7 +3,7 @@ package spacemonger
 import (
 	"time"
 
-	"spacemonger/spacetrader"
+	"spacemonger/spacetraders"
 )
 
 type DbUser struct {
@@ -13,7 +13,7 @@ type DbUser struct {
 	NewShipAssignment string
 	NewShipSystem     string
 	ShipMachines      []struct{}
-	Loans             []spacetrader.Loan
+	Loans             []spacetraders.Loan
 	OutstandingLoans  int
 	Credits           int
 }

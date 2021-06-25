@@ -3,7 +3,7 @@ package spacemonger
 import (
 	"context"
 
-	"spacemonger/spacetrader"
+	"spacemonger/spacetraders"
 
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
@@ -21,7 +21,9 @@ func GetUser(ctx context.Context, conn DBConn, username string) (DbUser, error) 
 		SELECT id::text, username, token, new_ship_assignment, new_ship_system FROM daemon_user
 		WHERE username = $1
 		LIMIT 1;
-	`, username).Scan(&u.Id, &u.Username, &u.Token, &u.NewShipAssignment, &u.NewShipSystem)
+		`,
+		username,
+	).Scan(&u.Id, &u.Username, &u.Token, &u.NewShipAssignment, &u.NewShipSystem)
 
 	if err != nil {
 		return DbUser{}, err
@@ -59,7 +61,8 @@ func GetLocation(ctx context.Context, conn DBConn, location string) (DbLocation,
 			,created_at
 		FROM daemon_location
 		WHERE location = $1;
-		`, location,
+		`,
+		location,
 	).Scan(
 		&l.System,
 		&l.SystemName,
@@ -103,7 +106,9 @@ func GetSystemLocationsFromLocation(ctx context.Context, conn DBConn, location s
 		INNER JOIN daemon_location dl2
 			ON dl1.system = dl2.system
 		WHERE dl2.location = $1;
-	`, location)
+		`,
+		location,
+	)
 	if err != nil {
 		return []string{}, nil
 	}
@@ -125,7 +130,7 @@ func GetSystemLocationsFromLocation(ctx context.Context, conn DBConn, location s
 	return locations, nil
 }
 
-func SaveFlightPlan(ctx context.Context, conn DBConn, userId string, flightPlan spacetrader.FlightPlan) error {
+func SaveFlightPlan(ctx context.Context, conn DBConn, userId string, flightPlan spacetraders.FlightPlan) error {
 	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_flight_plan (
 			 id
@@ -208,46 +213,50 @@ func GetDistanceBetweenLocations(ctx context.Context, conn DBConn, origin, desti
 	return r, nil
 }
 
-func SaveMarketplaceData(ctx context.Context, conn DBConn, location string, marketplaceData spacetrader.MarketplaceData) error {
-	_, err := conn.Exec(ctx, `
-		INSERT INTO daemon_marketplace(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
-		VALUES ($1, $2, $3, $4, $5, $6);
-		`,
-		location,
-		marketplaceData.Good,
-		marketplaceData.PurchasePricePerUnit,
-		marketplaceData.SellPricePerUnit,
-		marketplaceData.VolumePerUnit,
-		marketplaceData.QuantityAvailable,
-	)
-	if err != nil {
-		return err
-	}
+func SaveLocationMarketplaceRespones(ctx context.Context, conn DBConn, location string, marketplaceData spacetraders.GetLocationMarketplaceResponse) error {
+	for _, m := range marketplaceData.Marketplace {
+		_, err := conn.Exec(ctx, `
+			INSERT INTO daemon_marketplace(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
+			VALUES ($1, $2, $3, $4, $5, $6);
+			`,
+			location,
+			m.Good,
+			m.PurchasePricePerUnit,
+			m.SellPricePerUnit,
+			m.VolumePerUnit,
+			m.QuantityAvailable,
+		)
 
-	// TODO: It is possible that a good disappears completely from a location... how often does this happen... if ever
-	//       I can take care of it but I'm curious if it matters that much but since the marketplace data is processed
-	//       one row at a time there would need to be a more significant change to fix it. So I'm going to ignore it
-	//       until it actually becomes an issue
+		if err != nil {
+			return err
+		}
 
-	_, err = conn.Exec(ctx, `
-		INSERT INTO daemon_marketplace_latest(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (location, good)
-		DO UPDATE 
-			SET purchase_price_per_unit = $3,
-				sell_price_per_unit = $4,
-				volume_per_unit = $5,
-				quantity_available = $6;
-		`,
-		location,
-		marketplaceData.Good,
-		marketplaceData.PurchasePricePerUnit,
-		marketplaceData.SellPricePerUnit,
-		marketplaceData.VolumePerUnit,
-		marketplaceData.QuantityAvailable,
-	)
-	if err != nil {
-		return err
+		// TODO: It is possible that a good disappears completely from a location... how often does this happen... if ever
+		//       I can take care of it but I'm curious if it matters that much but since the marketplace data is processed
+		//       one row at a time there would need to be a more significant change to fix it. So I'm going to ignore it
+		//       until it actually becomes an issue
+
+		_, err = conn.Exec(ctx, `
+			INSERT INTO daemon_marketplace_latest(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (location, good)
+			DO UPDATE
+				SET purchase_price_per_unit = $3,
+					sell_price_per_unit = $4,
+					volume_per_unit = $5,
+					quantity_available = $6;
+			`,
+			location,
+			m.Good,
+			m.PurchasePricePerUnit,
+			m.SellPricePerUnit,
+			m.VolumePerUnit,
+			m.QuantityAvailable,
+		)
+
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -315,7 +324,7 @@ func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, sh
 	return routes, nil
 }
 
-func SaveShip(ctx context.Context, conn DBConn, userId string, ship spacetrader.Ship) error {
+func SaveShip(ctx context.Context, conn DBConn, userId string, ship spacetraders.Ship) error {
 	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_user_ship (
 			 user_id

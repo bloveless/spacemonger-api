@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"spacemonger"
-	"spacemonger/spacetrader"
+	"spacemonger/spacetraders"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -53,22 +53,27 @@ func main() {
 		panic(err)
 	}
 
+	client, err := spacetraders.NewClient()
+	if err != nil {
+		log.Fatalf("Unable to create client: %v", err)
+	}
+
 	ctx := context.Background()
-	myIp, err := spacetrader.GetMyIpAddress(ctx)
+	myIp, err := client.GetMyIpAddress(ctx)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	log.Printf("MyIp: %+v\n", myIp)
 
-	status, err := spacetrader.GetGameStatus(ctx)
-	if errors.Is(err, spacetrader.MaintenanceModeError) {
+	status, err := client.GetGameStatus(ctx)
+	if errors.Is(err, spacetraders.MaintenanceModeError) {
 		for {
 			log.Println("Detected SpaceTraders API in maintenance mode (status code 503). Sleeping for 60 seconds and trying again")
 			time.Sleep(60 * time.Second)
 
-			_, err = spacetrader.GetGameStatus(ctx)
-			if err == nil || !errors.Is(err, spacetrader.MaintenanceModeError) {
+			_, err = client.GetGameStatus(ctx)
+			if err == nil || !errors.Is(err, spacetraders.MaintenanceModeError) {
 				break
 			}
 		}
@@ -78,13 +83,22 @@ func main() {
 	}
 	log.Printf("Game Status: %+v\n", status)
 
-	user, err := spacemonger.InitializeUser(ctx, app.dbPool, fmt.Sprintf("%s-main", app.config.UsernameBase), "trader")
+	user, err := spacemonger.InitializeUser(ctx, client, app.dbPool, fmt.Sprintf("%s-main", app.config.UsernameBase), "trader")
 	if err != nil {
 		panic(err)
 	}
 	log.Printf("User %+v\n", user)
 
 	killSwitch := make(chan struct{})
+
+	// We need to borrow the users client to create the list of known locations
+	// TODO: We only know about OE right now
+	systemLocations, err := user.Client.GetSystemLocations(ctx, "OE")
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("System Locations: %+v\n", systemLocations)
 
 	// When implementing the ship the ship will have a few layers of strategy. Early on the ship won't know anything
 	// about the market so it will just buy a good from the location it is at and move to the closest location to sell
@@ -113,12 +127,12 @@ func main() {
 	}()
 
 	go func() {
-		// User will all it's ships to the ships channel
+		// User will add all it's ships to the ships channel
 		for _, s := range user.Ships {
 			ships <- spacemonger.NewShip(app.dbPool, user, s)
 		}
 
-		// Then wait forever to receive a command from one of
+		// Then wait forever to receive a command from one of it's ships
 		for {
 			select {
 			case msg := <-user.ShipMessages:
