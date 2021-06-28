@@ -17,7 +17,7 @@ type User struct {
 	Id               string
 	Token            string
 	Username         string
-	Ships            []DbShip
+	Ships            []ShipRow
 	Loans            []spacetraders.Loan
 	OutstandingLoans int
 	Credits          int
@@ -40,7 +40,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 
 		log.Printf("ClaimedUsername: %+v\n", claimedUsername)
 
-		dbUser, err = SaveUser(ctx, pool, DbUser{
+		dbUser, err = SaveUser(ctx, pool, UserRow{
 			Username:        username,
 			Token:           claimedUsername.Token,
 			NewShipRoleData: newShipRoleData,
@@ -137,7 +137,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 		log.Printf("New credits: %d\n", newCredits)
 
 		// TODO: We need to save this ship to the db then add this ship to the users ship array
-		s := DbShip{
+		s := ShipRow{
 			UserId:       u.Id,
 			ShipId:       newShip.Id,
 			Type:         newShip.Type,

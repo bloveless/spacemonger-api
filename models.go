@@ -6,7 +6,7 @@ import (
 	"spacemonger/spacetraders"
 )
 
-type DbUser struct {
+type UserRow struct {
 	Id               string
 	Username         string
 	Token            string
@@ -23,7 +23,7 @@ type RoleData struct {
 	Location string `json:"location"`
 }
 
-type DbShip struct {
+type ShipRow struct {
 	UserId       string
 	ShipId       string
 	Type         string
@@ -39,7 +39,7 @@ type DbShip struct {
 	CreatedAt    time.Time
 }
 
-type DbLocation struct {
+type LocationRow struct {
 	System       string
 	Location     string
 	LocationName string
@@ -49,12 +49,12 @@ type DbLocation struct {
 	CreatedAt    time.Time
 }
 
-type DbDistanceBetweenLocations struct {
+type DistanceBetweenLocationsRow struct {
 	originLocationType string
 	distance           float64
 }
 
-type DbFlightPlan struct {
+type FlightPlanRow struct {
 	Id                     string
 	UserId                 string
 	ShipId                 string
@@ -68,7 +68,7 @@ type DbFlightPlan struct {
 	CreatedAt              time.Time
 }
 
-type DbRoute struct {
+type RouteRow struct {
 	PurchaseLocation          string
 	PurchaseLocationType      string
 	SellLocation              string

@@ -112,7 +112,7 @@ func main() {
 	log.Printf("System Locations: %+v\n", systemLocations)
 
 	for _, location := range systemLocations.Locations {
-		err = spacemonger.SaveLocation(ctx, app.dbPool, spacemonger.DbLocation{
+		err = spacemonger.SaveLocation(ctx, app.dbPool, spacemonger.LocationRow{
 			System:       "OE",
 			Location:     location.Symbol,
 			LocationName: location.Name,
@@ -155,7 +155,7 @@ func main() {
 	go func() {
 		// User will add all it's ships to the ships channel
 		for _, s := range user.Ships {
-			newShip, err := spacemonger.NewShip(ctx, app.dbPool, user, s)
+			newShip, err := spacemonger.ShipFromShipRow(ctx, app.dbPool, user, s)
 			if err != nil {
 				log.Printf("Unexpected error occurred while adding ships to ship channel: %+v", err)
 				killSwitch <- struct{}{}

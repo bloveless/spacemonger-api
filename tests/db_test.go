@@ -248,7 +248,7 @@ func (suite *DbTestSuite) TestGetRoutesFromLocation() {
 			suite.Fail("Unable to get routes from location", err)
 		}
 
-		expectedRoutes := []spacemonger.DbRoute{
+		expectedRoutes := []spacemonger.RouteRow{
 			{
 				PurchaseLocation:          "location1",
 				PurchaseLocationType:      "PLANET",

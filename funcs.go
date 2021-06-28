@@ -77,7 +77,7 @@ func PurchaseFastestShip(ctx context.Context, u User, system string) (spacetrade
 		}
 	}
 
-	if foundShip == false {
+	if !foundShip {
 		return spacetraders.Ship{}, 0, fmt.Errorf("%s -- unable to find a ship for the user to purchase", u.Username)
 	}
 

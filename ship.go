@@ -18,8 +18,8 @@ type Ship struct {
 	Role         ShipRole
 }
 
-func NewShip(ctx context.Context, dbConn DBConn, u User, ship Ship) (Ship, error) {
-	s, err := u.Client.GetMyShip(ctx, ship.Id)
+func ShipFromShipRow(ctx context.Context, dbConn DBConn, u User, ship ShipRow) (Ship, error) {
+	s, err := u.Client.GetMyShip(ctx, ship.ShipId)
 	if err != nil {
 		return Ship{}, err
 	}
@@ -27,7 +27,7 @@ func NewShip(ctx context.Context, dbConn DBConn, u User, ship Ship) (Ship, error
 	return Ship{
 		dbConn:       dbConn,
 		user:         u,
-		Id:           ship.Id,
+		Id:           ship.ShipId,
 		location:     s.Ship.Location,
 		ShipMessages: u.ShipMessages,
 		Role:         Scout,
@@ -61,7 +61,7 @@ func tsp(bestCost float64, bestPath []int, graph [][]float64, visited []bool, cu
 	// of currPos node and increasing the count
 	// by 1 and cost by graph[currPos][i] value
 	for i, currentCost := range graph[curPos] {
-		if visited[i] == false && currentCost != 0 {
+		if !visited[i] && currentCost != 0 {
 			// Mark as visited
 			log.Printf("%d -> %d Path: %v\n", curPos, i, append(path, i))
 			visited[i] = true
@@ -82,8 +82,8 @@ func SortLocations(locations []spacetraders.SystemLocation) (float64, []string) 
 	visited[0] = true
 	adjacencyList := make([][]float64, len(locations))
 
-	for i, _ := range locations {
-		for i2, _ := range locations {
+	for i := range locations {
+		for i2 := range locations {
 			adjacencyList[i] = append(adjacencyList[i], getSquaredDistance(locations[i], locations[i2]))
 		}
 	}
