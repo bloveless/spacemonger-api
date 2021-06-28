@@ -17,7 +17,7 @@ type User struct {
 	Id               string
 	Token            string
 	Username         string
-	Ships            []spacetraders.Ship
+	Ships            []DbShip
 	Loans            []spacetraders.Loan
 	OutstandingLoans int
 	Credits          int
@@ -27,7 +27,7 @@ type User struct {
 
 // InitializeUser will get or create the user in the db and get the user ready to play. This means that if the user has
 // no money attempt to take out a loan. Maybe if the user doesn't have any ships then we should purchase a ship.
-func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpool.Pool, username string, newShipAssignment string) (User, error) {
+func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpool.Pool, username string, newShipRoleData RoleData) (User, error) {
 	// Get user from DB
 	dbUser, err := GetUser(ctx, pool, username)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -41,10 +41,9 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 		log.Printf("ClaimedUsername: %+v\n", claimedUsername)
 
 		dbUser, err = SaveUser(ctx, pool, DbUser{
-			Username:          username,
-			Token:             claimedUsername.Token,
-			NewShipAssignment: newShipAssignment,
-			NewShipSystem:     "OE", // TODO: This shouldn't be hard coded to OE
+			Username:        username,
+			Token:           claimedUsername.Token,
+			NewShipRoleData: newShipRoleData,
 		})
 		if err != nil {
 			return User{}, err
@@ -89,18 +88,22 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 	}
 	u.OutstandingLoans = outstandingLoans
 
-	ships, err := u.Client.GetMyShips(ctx)
+	// ships, err := u.Client.GetMyShips(ctx)
+	// if err != nil {
+	// 	return User{}, err
+	// }
+	//
+	// for _, ship := range ships.Ships {
+	// 	if err := SaveShip(ctx, pool, dbUser.Id, ship); err != nil {
+	// 		return User{}, err
+	// 	}
+	// }
+
+	ships, err := GetShips(ctx, pool, u.Id)
 	if err != nil {
 		return User{}, err
 	}
-
-	for _, ship := range ships.Ships {
-		if err := SaveShip(ctx, pool, dbUser.Id, ship); err != nil {
-			return User{}, err
-		}
-	}
-
-	u.Ships = ships.Ships
+	u.Ships = ships
 
 	if u.Credits == 0 {
 		createLoanResponse, err := u.Client.CreateLoan(ctx, spacetraders.StartUpLoan)
@@ -123,10 +126,36 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 	}
 
 	if len(u.Ships) == 0 {
-		u, err = PurchaseFastestShip(ctx, u, "OE") // TODO: this shouldn't be hard coded to OE
+		newShip, newCredits, err := PurchaseFastestShip(ctx, u, newShipRoleData.System)
 		if err != nil {
 			// This is an interesting case because in general if we can't purchase a ship it's no big deal and we'll
 			// try again later... but here the user has no ships and wasn't able to buy one... so the user can't operate
+			return u, err
+		}
+
+		log.Printf("New Ship: %+v\n", newShip)
+		log.Printf("New credits: %d\n", newCredits)
+
+		// TODO: We need to save this ship to the db then add this ship to the users ship array
+		s := DbShip{
+			UserId:       u.Id,
+			ShipId:       newShip.Id,
+			Type:         newShip.Type,
+			Class:        newShip.Class,
+			MaxCargo:     newShip.MaxCargo,
+			LoadingSpeed: newShip.LoadingSpeed,
+			Speed:        newShip.Speed,
+			Manufacturer: newShip.Manufacturer,
+			Plating:      newShip.Plating,
+			Weapons:      newShip.Weapons,
+			RoleData:     newShipRoleData,
+		}
+
+		u.Ships = append(u.Ships, s)
+		u.Credits = newCredits
+
+		err = SaveShip(ctx, pool, u.Id, s)
+		if err != nil {
 			return u, err
 		}
 	}
@@ -143,87 +172,3 @@ func (u *User) ProcessShipMessage(m ShipMessage) error {
 
 	return UnknownShipMessageType
 }
-
-// PurchaseFastestShip will attempt to purchase a new ship for the user. If no ship was able to be purchased then the
-// original unmodified user will be returned along with the error.
-func PurchaseFastestShip(ctx context.Context, u User, system string) (User, error) {
-	availableShips, err := u.Client.GetShipsForSale(ctx)
-	if err != nil {
-		return u, err
-	}
-
-	dockedShipLocations := make(map[string]bool)
-	for _, ship := range u.Ships {
-		if ship.Location != "" {
-			dockedShipLocations[ship.Location] = true
-		}
-	}
-
-	log.Printf("%s -- Docked ship locations are %v\n", u.Username, dockedShipLocations)
-	log.Printf("%s -- User has %d ships\n", u.Username, len(u.Ships))
-	log.Printf("%s -- Ships available for purchase %+v\n", u.Username, availableShips)
-
-	if len(u.Ships) > 0 && len(dockedShipLocations) == 0 {
-		log.Printf("%s -- No docked ships found. Unable to purchase new ship. Will retry later\n", u.Username)
-		return u, nil
-	}
-
-	fastestShipSpeed := 0
-	fastestShipPrice := 0
-	fastestShipLocation := ""
-	fastestShipType := ""
-	foundShip := false
-
-	for _, availableShip := range availableShips.ShipsForSale {
-		for _, purchaseLocation := range availableShip.PurchaseLocations {
-			// users can only purchase ships at locations where they have a ship docked...
-			// unless they currently don't have any ships
-			if _, ok := dockedShipLocations[purchaseLocation.Location]; !ok && len(u.Ships) > 0 {
-				continue
-			}
-
-			// TODO: Handle restricted goods better. Right now I just ignore any ships that are restricted
-			//       to specific goods
-			if len(availableShip.RestrictedGoods) > 0 {
-				continue
-			}
-
-			if u.Credits < purchaseLocation.Price {
-				continue
-			}
-
-			if availableShip.Speed < fastestShipSpeed {
-				continue
-			}
-
-			if purchaseLocation.System != system {
-				continue
-			}
-
-			foundShip = true
-			fastestShipSpeed = availableShip.Speed
-			fastestShipType = availableShip.ShipType
-			fastestShipLocation = purchaseLocation.Location
-			fastestShipPrice = purchaseLocation.Price
-		}
-	}
-
-	if foundShip == false {
-		return u, fmt.Errorf("%s -- unable to find a ship for the user to purchase", u.Username)
-	}
-
-	log.Printf("%s -- Buying ship %s for %d at location %s\n", u.Username, fastestShipType, fastestShipPrice, fastestShipLocation)
-	s, err := u.Client.PurchaseShip(ctx, fastestShipLocation, fastestShipType)
-	if err != nil {
-		return u, err
-	}
-
-	u.Ships = append(u.Ships, s.Ship)
-	u.Credits = s.Credits
-
-	return u, nil
-}
-
-// func PurchaseLargestShip(u User) (User, error) {
-//
-// }

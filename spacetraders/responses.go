@@ -103,7 +103,7 @@ type PurchaseLocation struct {
 }
 
 type ShipForSale struct {
-	ShipType          string             `json:"type"`
+	Type              string             `json:"type"`
 	Class             string             `json:"class"`
 	MaxCargo          int                `json:"maxCargo"`
 	LoadingSpeed      int                `json:"loadingSpeed"`
@@ -121,7 +121,7 @@ type GetShipsForSaleResponse struct {
 
 type SystemLocation struct {
 	Symbol             string   `json:"symbol"`
-	SystemLocationType string   `json:"type"`
+	Type               string   `json:"type"`
 	Name               string   `json:"name"`
 	X                  int      `json:"x"`
 	Y                  int      `json:"y"`
@@ -134,8 +134,17 @@ type GetSystemLocationsResponse struct {
 	Locations []SystemLocation `json:"locations"`
 }
 
+type System struct {
+	Name string `json:"name"`
+	Symbol string `json:"symbol"`
+}
+
+type GetSystemResponse struct {
+	System System `json:"system"`
+}
+
 type AvailableLoan struct {
-	LoanType           string  `json:"type"`
+	Type               string  `json:"type"`
 	Amount             int     `json:"amount"`
 	Rate               float64 `json:"rate"`
 	TermInDays         int     `json:"termInDays"`

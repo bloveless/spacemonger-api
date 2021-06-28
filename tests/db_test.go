@@ -74,10 +74,17 @@ func (suite *DbTestSuite) withTransaction(f func(ctx context.Context, tx pgx.Tx)
 
 func (suite *DbTestSuite) TestGetUser() {
 	suite.withTransaction(func(ctx context.Context, tx pgx.Tx) {
+		rd := spacemonger.RoleData{
+			Role:     "Trader",
+			System:   "system-1",
+			Location: "location-1",
+		}
 		_, err := tx.Exec(ctx, `
-			INSERT INTO daemon_user (username, token, new_ship_assignment, new_ship_system)
-			VALUES ('test-username', 'test-token', 'test-assignment', 'test-system');
-		`)
+			INSERT INTO daemon_user (username, token, new_ship_role_data)
+			VALUES ('test-username', 'test-token', $1);
+			`,
+			rd,
+		)
 		if err != nil {
 			suite.FailNow("Failed inserting user", err)
 		}
@@ -90,34 +97,37 @@ func (suite *DbTestSuite) TestGetUser() {
 		suite.NotEmpty(user.Id, "user.Id")
 		suite.Equal(user.Username, "test-username", "user.Username")
 		suite.Equal(user.Token, "test-token", "user.Token")
-		suite.Equal(user.NewShipAssignment, "test-assignment", "user.NewShipAssignment")
-		suite.Equal(user.NewShipSystem, "test-system", "user.NewShipSystem")
+		suite.Equal(user.NewShipRoleData, rd)
 	})
 }
 
 func (suite *DbTestSuite) TestSaveMarketplaceData() {
 	suite.withTransaction(func(ctx context.Context, tx pgx.Tx) {
-		m := spacetraders.MarketplaceData{
-			Good:                 "METALS",
-			VolumePerUnit:        1,
-			PurchasePricePerUnit: 10,
-			SellPricePerUnit:     9,
-			QuantityAvailable:    1000,
+		m := spacetraders.GetLocationMarketplaceResponse{
+			Marketplace: []spacetraders.MarketplaceData{{
+				Good:                 "METALS",
+				VolumePerUnit:        1,
+				PurchasePricePerUnit: 10,
+				SellPricePerUnit:     9,
+				QuantityAvailable:    1000,
+			}},
 		}
-		m2 := spacetraders.MarketplaceData{
-			Good:                 "METALS",
-			VolumePerUnit:        2,
-			PurchasePricePerUnit: 20,
-			SellPricePerUnit:     18,
-			QuantityAvailable:    2000,
+		m2 := spacetraders.GetLocationMarketplaceResponse{
+			Marketplace: []spacetraders.MarketplaceData{{
+				Good:                 "METALS",
+				VolumePerUnit:        2,
+				PurchasePricePerUnit: 20,
+				SellPricePerUnit:     18,
+				QuantityAvailable:    2000,
+			}},
 		}
 
-		err := spacemonger.SaveMarketplaceData(ctx, tx, "location1", m)
+		err := spacemonger.SaveLocationMarketplaceResponses(ctx, tx, "location1", m)
 		if err != nil {
 			suite.Fail("Unable to save marketplace data", err)
 		}
 
-		err = spacemonger.SaveMarketplaceData(ctx, tx, "location1", m2)
+		err = spacemonger.SaveLocationMarketplaceResponses(ctx, tx, "location1", m2)
 		if err != nil {
 			suite.Fail("Unable to save second marketplace data")
 		}
@@ -256,6 +266,42 @@ func (suite *DbTestSuite) TestGetRoutesFromLocation() {
 		}
 
 		suite.Equal(expectedRoutes, routes, "Routes weren't as expected")
+	})
+}
+
+func (suite *DbTestSuite) TestGetShips() {
+	suite.withTransaction(func(ctx context.Context, tx pgx.Tx) {
+		rd := spacemonger.RoleData{
+			Role:     "Trader",
+			System:   "system-1",
+			Location: "",
+		}
+
+		// rdJson, err := json.Marshal(rd)
+		// if err != nil {
+		// 	suite.Fail("Unable to marshall role data", err)
+		// }
+
+		var userId string
+		err := tx.QueryRow(ctx, `
+			INSERT INTO daemon_user_ship (
+				user_id, ship_id, type, class, max_cargo, loading_speed, speed, manufacturer, plating, weapons, role_data
+			) VALUES
+			(gen_random_uuid(), 'ship-id-1', 'type-1', 'class-1', 10, 10, 10, 10, 10, 10, $1)
+			RETURNING user_id;
+			`,
+			rd,
+		).Scan(&userId)
+		if err != nil {
+			suite.Fail("Error creating ship data", err)
+		}
+
+		ships, err := spacemonger.GetShips(ctx, tx, userId)
+		if err != nil {
+			suite.Fail("Error getting ships", err)
+		}
+
+		fmt.Printf("GetShips: %+v\n", ships)
 	})
 }
 

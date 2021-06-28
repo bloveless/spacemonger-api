@@ -7,23 +7,43 @@ import (
 )
 
 type DbUser struct {
-	Id                string
-	Username          string
-	Token             string
-	NewShipAssignment string
-	NewShipSystem     string
-	ShipMachines      []struct{}
-	Loans             []spacetraders.Loan
-	OutstandingLoans  int
-	Credits           int
+	Id               string
+	Username         string
+	Token            string
+	NewShipRoleData  RoleData
+	ShipMachines     []struct{}
+	Loans            []spacetraders.Loan
+	OutstandingLoans int
+	Credits          int
+}
+
+type RoleData struct {
+	Role     string `json:"role"`
+	System   string `json:"system"`
+	Location string `json:"location"`
+}
+
+type DbShip struct {
+	UserId       string
+	ShipId       string
+	Type         string
+	Class        string
+	MaxCargo     int
+	LoadingSpeed int
+	Speed        int
+	Manufacturer string
+	Plating      int
+	Weapons      int
+	RoleData     RoleData
+	ModifiedAt   time.Time
+	CreatedAt    time.Time
 }
 
 type DbLocation struct {
 	System       string
-	SystemName   string
 	Location     string
 	LocationName string
-	LocationType string
+	Type         string
 	X            int
 	Y            int
 	CreatedAt    time.Time

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -32,7 +31,7 @@ func NewApp() App {
 
 	pool, err := pgxpool.Connect(context.Background(), config.PostgresUrl)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
+		log.Printf("Unable to connect to database: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -83,7 +82,7 @@ func main() {
 	}
 	log.Printf("Game Status: %+v\n", status)
 
-	user, err := spacemonger.InitializeUser(ctx, client, app.dbPool, fmt.Sprintf("%s-main", app.config.UsernameBase), "trader")
+	user, err := spacemonger.InitializeUser(ctx, client, app.dbPool, app.config.Username, spacemonger.RoleData{Role: "Trader", System: "OE"})
 	if err != nil {
 		panic(err)
 	}
@@ -93,12 +92,39 @@ func main() {
 
 	// We need to borrow the users client to create the list of known locations
 	// TODO: We only know about OE right now
+	system, err := user.Client.GetSystem(ctx, "OE")
+	if err != nil {
+		panic(err)
+	}
+
+	log.Printf("System: %+v\n", system)
+
+	err = spacemonger.SaveSystem(ctx, app.dbPool, system)
+	if err != nil {
+		panic(err)
+	}
+
 	systemLocations, err := user.Client.GetSystemLocations(ctx, "OE")
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("System Locations: %+v\n", systemLocations)
+	log.Printf("System Locations: %+v\n", systemLocations)
+
+	for _, location := range systemLocations.Locations {
+		err = spacemonger.SaveLocation(ctx, app.dbPool, spacemonger.DbLocation{
+			System:       "OE",
+			Location:     location.Symbol,
+			LocationName: location.Name,
+			Type:         location.Type,
+			X:            location.X,
+			Y:            location.Y,
+		})
+
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	// When implementing the ship the ship will have a few layers of strategy. Early on the ship won't know anything
 	// about the market so it will just buy a good from the location it is at and move to the closest location to sell
@@ -129,8 +155,19 @@ func main() {
 	go func() {
 		// User will add all it's ships to the ships channel
 		for _, s := range user.Ships {
-			ships <- spacemonger.NewShip(app.dbPool, user, s)
+			newShip, err := spacemonger.NewShip(ctx, app.dbPool, user, s)
+			if err != nil {
+				log.Printf("Unexpected error occurred while adding ships to ship channel: %+v", err)
+				killSwitch <- struct{}{}
+				panic(err)
+			}
+			ships <- newShip
 		}
+
+		// Initially the user will create any ships according to the rules.
+		// I.E. While a users credits are greater than 50k buy another JW-MK-I up until a max of 20 ships
+		//      Then, auto upgrade ships for example, from a JW-MK-I to GR-MK-I after the user has 200k until a max
+		//      of 5 ships have been upgraded... (new ships need to start with a specific role... probably trader)
 
 		// Then wait forever to receive a command from one of it's ships
 		for {

@@ -264,7 +264,7 @@ func (ac AuthorizedClient) PayOffLoan(ctx context.Context, loanId string) (PayOf
 
 func (ac AuthorizedClient) CreateLoan(ctx context.Context, loanType string) (CreateLoanResponse, error) {
 	request := CreateLoanRequest{
-		LoanType: loanType,
+		Type: loanType,
 	}
 	requestJson, err := json.Marshal(request)
 	if err != nil {
@@ -363,7 +363,7 @@ func (ac AuthorizedClient) CreateSellOrder(ctx context.Context, shipId, good str
 func (ac AuthorizedClient) PurchaseShip(ctx context.Context, location, shipType string) (PurchaseShipResponse, error) {
 	request := PurchaseShipRequest{
 		Location: location,
-		ShipType: shipType,
+		Type:     shipType,
 	}
 	requestJson, err := json.Marshal(request)
 	if err != nil {
@@ -462,7 +462,15 @@ func (ac AuthorizedClient) GetSystemLocations(ctx context.Context, system string
 	return response, nil
 }
 
-// TODO: Get systems info
+func (ac AuthorizedClient) GetSystem(ctx context.Context, system string) (GetSystemResponse, error) {
+	response := GetSystemResponse{}
+	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/systems/%s", system), ac.token, nil, &response)
+	if err != nil {
+		return GetSystemResponse{}, nil
+	}
+
+	return response, nil
+}
 
 // ////////////////////////////////////////////
 // /// TYPES

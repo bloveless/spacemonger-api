@@ -27,9 +27,15 @@ CREATE TABLE public.daemon_http_log (
 
 --
 
+CREATE TABLE public.daemon_system (
+     system VARCHAR(100) NOT NULL PRIMARY KEY
+    ,name VARCHAR(100) NOT NULL
+);
+
+--
+
 CREATE TABLE public.daemon_location (
      system VARCHAR(100) NOT NULL
-    ,system_name VARCHAR(100) NOT NULL
     ,location VARCHAR(100) NOT NULL
     ,location_name VARCHAR(100) NOT NULL
     ,location_type VARCHAR(100) NOT NULL
@@ -73,8 +79,7 @@ CREATE TABLE public.daemon_user (
      id uuid DEFAULT public.uuid_generate_v4()
     ,username VARCHAR(100) NOT NULL
     ,token VARCHAR(100) NOT NULL
-    ,new_ship_assignment VARCHAR(50) NOT NULL
-    ,new_ship_system VARCHAR(50)
+    ,new_ship_role_data JSONB
     ,created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
@@ -89,10 +94,12 @@ CREATE TABLE public.daemon_user_ship (
     ,type VARCHAR(50) NOT NULL
     ,class VARCHAR(50) NOT NULL
     ,max_cargo INT NOT NULL
+    ,loading_speed INT NOT NULL
     ,speed INT NOT NULL
     ,manufacturer VARCHAR(50) NOT NULL
     ,plating INT NOT NULL
     ,weapons INT NOT NULL
+    ,role_data JSONB
     ,modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -128,4 +135,3 @@ CREATE TABLE public.daemon_user_transaction (
     ,location VARCHAR(100) NOT NULL
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
-

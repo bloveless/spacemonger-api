@@ -13,7 +13,7 @@ type Ship struct {
 	Location       string  `json:"location"`
 	Cargo          []Cargo `json:"cargo"`
 	SpaceAvailable int     `json:"spaceAvailable"`
-	ShipType       string  `json:"type"`
+	Type           string  `json:"type"`
 	Class          string  `json:"class"`
 	MaxCargo       int     `json:"maxCargo"`
 	LoadingSpeed   int     `json:"loadingSpeed"`
@@ -31,7 +31,7 @@ type Loan struct {
 	Due             time.Time `json:"due"`
 	RepaymentAmount int       `json:"repaymentAmount"`
 	Status          string    `json:"status"`
-	LoanType        string    `json:"type"`
+	Type            string    `json:"type"`
 }
 
 type FlightPlan struct {
@@ -49,14 +49,14 @@ type FlightPlan struct {
 }
 
 type Structure struct {
-	Id            string `json:"id"`
-	StructureType string `json:"structureType"`
-	Location      string `json:"location"`
+	Id       string `json:"id"`
+	Type     string `json:"structureType"`
+	Location string `json:"location"`
 }
 
 type LocationDetails struct {
 	Symbol             string      `json:"symbol"`
-	LocationType       string      `json:"type"`
+	Type               string      `json:"type"`
 	Name               string      `json:"name"`
 	X                  int         `json:"x"`
 	Y                  int         `json:"y"`

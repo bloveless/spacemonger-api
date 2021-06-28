@@ -5,7 +5,7 @@ import (
 )
 
 type Config struct {
-	UsernameBase string `mapstructure:"USERNAME_BASE"`
+	Username string `mapstructure:"USERNAME"`
 	PostgresUrl  string `mapstructure:"POSTGRES_URL"`
 	EnableScouts bool   `mapstructure:"ENABLE_SCOUTS"`
 	EnableTrader bool   `mapstructure:"ENABLE_TRADER"`

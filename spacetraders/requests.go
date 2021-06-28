@@ -6,7 +6,7 @@ type CreateFlightPlanRequest struct {
 }
 
 type CreateLoanRequest struct {
-	LoanType string `json:"type"`
+	Type string `json:"type"`
 }
 
 type CreatePurchaseOrderRequest struct {
@@ -23,7 +23,7 @@ type CreateSellOrderRequest struct {
 
 type PurchaseShipRequest struct {
 	Location string `json:"location"`
-	ShipType string `json:"type"`
+	Type     string `json:"type"`
 }
 
 type JettisonCargoRequest struct {
