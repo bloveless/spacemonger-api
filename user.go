@@ -88,22 +88,38 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 	}
 	u.OutstandingLoans = outstandingLoans
 
-	// ships, err := u.Client.GetMyShips(ctx)
-	// if err != nil {
-	// 	return User{}, err
-	// }
-	//
-	// for _, ship := range ships.Ships {
-	// 	if err := SaveShip(ctx, pool, dbUser.Id, ship); err != nil {
-	// 		return User{}, err
-	// 	}
-	// }
-
-	ships, err := GetShips(ctx, pool, u.Id)
+	ships, err := u.Client.GetMyShips(ctx)
 	if err != nil {
 		return User{}, err
 	}
-	u.Ships = ships
+
+	for _, ship := range ships.Ships {
+		sr := ShipRow{
+			UserId:       u.Id,
+			ShipId:       ship.Id,
+			Type:         ship.Type,
+			Class:        ship.Class,
+			MaxCargo:     ship.MaxCargo,
+			LoadingSpeed: ship.LoadingSpeed,
+			Speed:        ship.Speed,
+			Manufacturer: ship.Manufacturer,
+			Plating:      ship.Plating,
+			Weapons:      ship.Weapons,
+			// If this is a new ship then the new user role data will be used, if the ship exists it will not be altered
+			RoleData:     dbUser.NewShipRoleData,
+			Location:     ship.Location,
+		}
+
+		if err := SaveShip(ctx, pool, dbUser.Id, sr); err != nil {
+			return User{}, err
+		}
+	}
+
+	shipRows, err := GetShips(ctx, pool, u.Id)
+	if err != nil {
+		return User{}, err
+	}
+	u.Ships = shipRows
 
 	if u.Credits == 0 {
 		createLoanResponse, err := u.Client.CreateLoan(ctx, spacetraders.StartUpLoan)
@@ -123,41 +139,6 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 		u.OutstandingLoans = outstandingLoans
 
 		log.Printf("New Loan: %+v\n", createLoanResponse)
-	}
-
-	if len(u.Ships) == 0 {
-		newShip, newCredits, err := PurchaseFastestShip(ctx, u, newShipRoleData.System)
-		if err != nil {
-			// This is an interesting case because in general if we can't purchase a ship it's no big deal and we'll
-			// try again later... but here the user has no ships and wasn't able to buy one... so the user can't operate
-			return u, err
-		}
-
-		log.Printf("New Ship: %+v\n", newShip)
-		log.Printf("New credits: %d\n", newCredits)
-
-		// TODO: We need to save this ship to the db then add this ship to the users ship array
-		s := ShipRow{
-			UserId:       u.Id,
-			ShipId:       newShip.Id,
-			Type:         newShip.Type,
-			Class:        newShip.Class,
-			MaxCargo:     newShip.MaxCargo,
-			LoadingSpeed: newShip.LoadingSpeed,
-			Speed:        newShip.Speed,
-			Manufacturer: newShip.Manufacturer,
-			Plating:      newShip.Plating,
-			Weapons:      newShip.Weapons,
-			RoleData:     newShipRoleData,
-		}
-
-		u.Ships = append(u.Ships, s)
-		u.Credits = newCredits
-
-		err = SaveShip(ctx, pool, u.Id, s)
-		if err != nil {
-			return u, err
-		}
 	}
 
 	return u, nil

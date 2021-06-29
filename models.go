@@ -35,6 +35,7 @@ type ShipRow struct {
 	Plating      int
 	Weapons      int
 	RoleData     RoleData
+	Location     string
 	ModifiedAt   time.Time
 	CreatedAt    time.Time
 }

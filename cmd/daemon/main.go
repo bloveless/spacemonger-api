@@ -155,7 +155,7 @@ func main() {
 	go func() {
 		// User will add all it's ships to the ships channel
 		for _, s := range user.Ships {
-			newShip, err := spacemonger.ShipFromShipRow(ctx, app.dbPool, user, s)
+			newShip, err := spacemonger.ShipFromShipRow(app.dbPool, user, s)
 			if err != nil {
 				log.Printf("Unexpected error occurred while adding ships to ship channel: %+v", err)
 				killSwitch <- struct{}{}
@@ -168,6 +168,20 @@ func main() {
 		// I.E. While a users credits are greater than 50k buy another JW-MK-I up until a max of 20 ships
 		//      Then, auto upgrade ships for example, from a JW-MK-I to GR-MK-I after the user has 200k until a max
 		//      of 5 ships have been upgraded... (new ships need to start with a specific role... probably trader)
+
+		for {
+			if user.Credits < 50_000 && len(user.Ships) >= 20 {
+				break
+			}
+
+			newShip, newCredits, err := spacemonger.PurchaseShip(ctx, user, "OE", "JW-MK-I")
+			if err != nil {
+				panic(err)
+			}
+
+			user.Credits = newCredits
+			user.Ships = append(user.Ships, newShip)
+		}
 
 		// Then wait forever to receive a command from one of it's ships
 		for {

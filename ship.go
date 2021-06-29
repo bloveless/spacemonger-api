@@ -2,11 +2,9 @@ package spacemonger
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"math"
 	"time"
-
-	"spacemonger/spacetraders"
 )
 
 type Ship struct {
@@ -18,90 +16,17 @@ type Ship struct {
 	Role         ShipRole
 }
 
-func ShipFromShipRow(ctx context.Context, dbConn DBConn, u User, ship ShipRow) (Ship, error) {
-	s, err := u.Client.GetMyShip(ctx, ship.ShipId)
-	if err != nil {
-		return Ship{}, err
-	}
+func ShipFromShipRow(dbConn DBConn, u User, ship ShipRow) (Ship, error) {
+	fmt.Printf("ShipRow: %+v\n", ship)
 
 	return Ship{
 		dbConn:       dbConn,
 		user:         u,
 		Id:           ship.ShipId,
-		location:     s.Ship.Location,
+		location:     ship.Location,
 		ShipMessages: u.ShipMessages,
 		Role:         Scout,
 	}, nil
-}
-
-func getSquaredDistance(a, b spacetraders.SystemLocation) float64 {
-	return math.Pow(float64(b.X-a.X), 2) + math.Pow(float64(b.Y-a.Y), 2)
-}
-
-// https://www.geeksforgeeks.org/travelling-salesman-problem-implementation-using-backtracking/
-func tsp(bestCost float64, bestPath []int, graph [][]float64, visited []bool, curPos int, cost float64, path []int) (float64, []int) {
-	// If last node is reached and it has
-	// a link to the starting node i.e
-	// the source then keep the minimum
-	// value out of the total cost of
-	// traversal and "ans"
-	// Finally return to check for
-	// more possible values
-	if len(path) == len(graph[curPos]) && (bestCost != 0 && cost >= bestCost) {
-		log.Printf("Not new best cost %f, Not new best path %v\n", cost, path)
-	}
-
-	if len(path) == len(graph[curPos]) && (bestCost == 0 || cost < bestCost) {
-		log.Printf("New best cost %f, New best path %v\n", cost, path)
-		return cost, path
-	}
-
-	// BACKTRACKING STEP
-	// Loop to traverse the adjacency list
-	// of currPos node and increasing the count
-	// by 1 and cost by graph[currPos][i] value
-	for i, currentCost := range graph[curPos] {
-		if !visited[i] && currentCost != 0 {
-			// Mark as visited
-			log.Printf("%d -> %d Path: %v\n", curPos, i, append(path, i))
-			visited[i] = true
-			bestCost, bestPath = tsp(bestCost, bestPath, graph, visited, i, cost+currentCost, append(path, i))
-
-			// Unmark i as visited pretty sure we don't need to unmark it since the visited array is copied into the subsequent
-			// tsp calls and will be unmodified when this loop is run again
-			visited[i] = false
-		}
-	}
-
-	return bestCost, bestPath
-}
-
-func SortLocations(locations []spacetraders.SystemLocation) (float64, []string) {
-	log.Printf("Locations length: %d\n", len(locations))
-	visited := make([]bool, len(locations))
-	visited[0] = true
-	adjacencyList := make([][]float64, len(locations))
-
-	for i := range locations {
-		for i2 := range locations {
-			adjacencyList[i] = append(adjacencyList[i], getSquaredDistance(locations[i], locations[i2]))
-		}
-	}
-
-	log.Printf("Visited: %+v\n", visited)
-	log.Println("Adjacency List")
-	for _, a := range adjacencyList {
-		log.Printf("%v\n", a)
-	}
-
-	pathCost, pathIndexes := tsp(0, []int{}, adjacencyList, visited, 0, 0, []int{0})
-	log.Printf("PathIndexes: %v\n", pathIndexes)
-	var path []string
-	for _, pathIndex := range pathIndexes {
-		path = append(path, locations[pathIndex].Symbol)
-	}
-
-	return pathCost, path
 }
 
 func (s Ship) Run(ctx context.Context) <-chan error {
@@ -110,6 +35,7 @@ func (s Ship) Run(ctx context.Context) <-chan error {
 		for {
 			log.Printf("%s -- Collecting marketplace for location %s\n", s.user.Username, s.location)
 
+			fmt.Printf("Ship: %+v\n", s)
 			marketplace, err := s.user.Client.GetLocationMarketplace(ctx, s.location)
 			if err != nil {
 				exit <- err
@@ -126,14 +52,12 @@ func (s Ship) Run(ctx context.Context) <-chan error {
 
 			// Phase 1: Fill up on fuel and fly to each location collecting marketplace data
 
-			locations, err := s.user.Client.GetSystemLocations(ctx, "OE")
-			if err != nil {
-				exit <- err
-				// TODO: return or continue
-				return
-			}
-
-			SortLocations(locations.Locations)
+			// locations, err := s.user.Client.GetSystemLocations(ctx, "OE")
+			// if err != nil {
+			// 	exit <- err
+			// 	// TODO: return or continue
+			// 	return
+			// }
 
 			log.Printf("%s -- Saved marketplace data for location %s\n", s.user.Username, s.location)
 

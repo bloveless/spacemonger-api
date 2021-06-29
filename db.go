@@ -60,6 +60,7 @@ func GetShips(ctx context.Context, conn DBConn, userId string) ([]ShipRow, error
 			,plating
 			,weapons
 			,role_data
+			,location
 		FROM daemon_user_ship
 		WHERE user_id = $1
 		`,
@@ -85,6 +86,7 @@ func GetShips(ctx context.Context, conn DBConn, userId string) ([]ShipRow, error
 			&s.Plating,
 			&s.Weapons,
 			&s.RoleData,
+			&s.Location,
 		)
 		if err != nil {
 			return []ShipRow{}, err
@@ -404,6 +406,7 @@ func SaveShip(ctx context.Context, conn DBConn, userId string, ship ShipRow) err
 			,plating
 			,weapons
 			,role_data
+			,location
 		) VALUES (
 			 $1::uuid
 			,$2
@@ -416,6 +419,7 @@ func SaveShip(ctx context.Context, conn DBConn, userId string, ship ShipRow) err
 			,$9
 			,$10
 			,$11
+			,$12
 		)
 		ON CONFLICT (user_id, ship_id)
 		DO UPDATE SET
@@ -429,6 +433,7 @@ func SaveShip(ctx context.Context, conn DBConn, userId string, ship ShipRow) err
 			,weapons = $10
 			-- Don't update role data on conflict. This way if a ship is re-assigned something other than the default
 			-- after its initial create it will remain that way but new ships will receive the default assignment
+			,location = $12
 			,modified_at = timezone('utc', NOW());
 		`,
 		ship.UserId,
@@ -442,6 +447,7 @@ func SaveShip(ctx context.Context, conn DBConn, userId string, ship ShipRow) err
 		ship.Plating,
 		ship.Weapons,
 		ship.RoleData,
+		ship.Location,
 	)
 	if err != nil {
 		return err

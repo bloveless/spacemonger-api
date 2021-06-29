@@ -100,6 +100,7 @@ CREATE TABLE public.daemon_user_ship (
     ,plating INT NOT NULL
     ,weapons INT NOT NULL
     ,role_data JSONB
+    ,location VARCHAR(50) NOT NULL
     ,modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
     ,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
