@@ -15,8 +15,8 @@ type DBConn interface {
 	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
 
-func GetUser(ctx context.Context, conn DBConn, username string) (UserRow, error) {
-	u := UserRow{}
+func GetUser(ctx context.Context, conn DBConn, username string) (User, error) {
+	u := User{}
 	err := conn.QueryRow(ctx, `
 		SELECT id::text, username, token, new_ship_role_data FROM daemon_user
 		WHERE username = $1
@@ -26,13 +26,14 @@ func GetUser(ctx context.Context, conn DBConn, username string) (UserRow, error)
 	).Scan(&u.Id, &u.Username, &u.Token, &u.NewShipRoleData)
 
 	if err != nil {
-		return UserRow{}, err
+		return User{}, err
 	}
 
 	return u, nil
 }
 
-func SaveUser(ctx context.Context, conn DBConn, user UserRow) (UserRow, error) {
+// SaveUser saves the user to the DB and returns a new user with the Id field populated
+func SaveUser(ctx context.Context, conn DBConn, user User) (User, error) {
 	err := conn.QueryRow(ctx, `
 		INSERT INTO daemon_user (username, token, new_ship_role_data)
 		VALUES ($1, $2, $3)
@@ -392,8 +393,18 @@ func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, sh
 	return routes, nil
 }
 
-func SaveShip(ctx context.Context, conn DBConn, userId string, ship ShipRow) error {
-	_, err := conn.Exec(ctx, `
+func SaveShip(ctx context.Context, conn DBConn, username string, ship ShipRow) (Ship, error) {
+	s := Ship{
+		Username:     username,
+		Id:           ship.ShipId,
+		Location:     ship.Location,
+		LoadingSpeed: ship.LoadingSpeed,
+		MaxCargo:     ship.MaxCargo,
+		Cargo:        []Cargo{},
+		RoleData:     ship.RoleData,
+	}
+
+	err := conn.QueryRow(ctx, `
 		INSERT INTO daemon_user_ship (
 			 user_id
 			,ship_id
@@ -434,7 +445,8 @@ func SaveShip(ctx context.Context, conn DBConn, userId string, ship ShipRow) err
 			-- Don't update role data on conflict. This way if a ship is re-assigned something other than the default
 			-- after its initial create it will remain that way but new ships will receive the default assignment
 			,location = $12
-			,modified_at = timezone('utc', NOW());
+			,modified_at = timezone('utc', NOW())
+		RETURNING role_data;
 		`,
 		ship.UserId,
 		ship.ShipId,
@@ -448,10 +460,11 @@ func SaveShip(ctx context.Context, conn DBConn, userId string, ship ShipRow) err
 		ship.Weapons,
 		ship.RoleData,
 		ship.Location,
-	)
+	).Scan(&s.RoleData)
+
 	if err != nil {
-		return err
+		return s, err
 	}
 
-	return nil
+	return s, nil
 }

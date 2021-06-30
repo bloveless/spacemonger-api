@@ -88,9 +88,7 @@ func main() {
 	}
 	log.Printf("User %+v\n", user)
 
-	killSwitch := make(chan struct{})
-
-	// We need to borrow the users client to create the list of known locations
+	// We need to borrow the first users client to create the list of known locations
 	// TODO: We only know about OE right now
 	system, err := user.Client.GetSystem(ctx, "OE")
 	if err != nil {
@@ -132,72 +130,18 @@ func main() {
 	// from both locations then it might be able to make a profitable trade. Try and expand this algorithm to the 3 or 4
 	// closest locations and pick trade routes within those
 
-	ships := make(chan spacemonger.Ship, 10)
+	// our first implementation will be a simple one just loop through all the users ships one at a time and process their
+	// next step
+
+	exit := make(chan struct{}, 1)
+	ships := make(chan spacemonger.Ship, 3)
 
 	go func() {
 		for ship := range ships {
 			ship := ship
 			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-
-				select {
-				case <-killSwitch:
-					log.Printf("Caught killswitch. Terminating ship %s\n", ship.Id)
-					cancel()
-				case err := <-ship.Run(ctx):
-					log.Printf("Ship terminated of it's own accord: %+v\n", err)
-				}
+				ship.Run(ctx, app.dbPool, user.Client)
 			}()
-		}
-	}()
-
-	go func() {
-		// User will add all it's ships to the ships channel
-		for _, s := range user.Ships {
-			newShip, err := spacemonger.ShipFromShipRow(app.dbPool, user, s)
-			if err != nil {
-				log.Printf("Unexpected error occurred while adding ships to ship channel: %+v", err)
-				killSwitch <- struct{}{}
-				panic(err)
-			}
-			ships <- newShip
-		}
-
-		// Initially the user will create any ships according to the rules.
-		// I.E. While a users credits are greater than 50k buy another JW-MK-I up until a max of 20 ships
-		//      Then, auto upgrade ships for example, from a JW-MK-I to GR-MK-I after the user has 200k until a max
-		//      of 5 ships have been upgraded... (new ships need to start with a specific role... probably trader)
-
-		for {
-			if user.Credits < 50_000 && len(user.Ships) >= 20 {
-				break
-			}
-
-			newShip, newCredits, err := spacemonger.PurchaseShip(ctx, user, "OE", "JW-MK-I")
-			if err != nil {
-				panic(err)
-			}
-
-			user.Credits = newCredits
-			user.Ships = append(user.Ships, newShip)
-		}
-
-		// Then wait forever to receive a command from one of it's ships
-		for {
-			select {
-			case msg := <-user.ShipMessages:
-				err := user.ProcessShipMessage(msg)
-				if errors.Is(err, spacemonger.UnknownShipMessageType) {
-					// If we received an unknown ship message type then this is a developer error
-					// and we need to add handler code for this
-					panic(err)
-				}
-				// TODO: Are there other errors that need to be handled... right now they are just ignored
-			case <-killSwitch:
-				log.Printf("%s -- Received kill switch. Terminating", user.Username)
-				return
-			}
 		}
 	}()
 
@@ -207,9 +151,9 @@ func main() {
 	select {
 	case <-sigs:
 		log.Println("Caught exit signal. Exiting")
-		close(killSwitch)
-	case <-killSwitch:
-		log.Println("Caught killSwitch. Exiting")
+		close(exit)
+	case <-exit:
+		log.Println("Caught exit. Exiting")
 	}
 
 	// TODO: Do I need a waitgroup wait here to wait until all the ships have finished closing after the killSwitch

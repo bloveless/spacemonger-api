@@ -2,73 +2,60 @@ package spacemonger
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
+
+	"spacemonger/spacetraders"
 )
 
+type Cargo struct {
+	Good        string
+	Quantity    int
+	TotalVolume int
+}
+
 type Ship struct {
-	dbConn       DBConn
-	user         User
+	Username     string
 	Id           string
-	location     string
-	ShipMessages chan ShipMessage
-	Role         ShipRole
+	Location     string
+	LoadingSpeed int
+	MaxCargo     int
+	Cargo        []Cargo
+	RoleData     RoleData
 }
 
-func ShipFromShipRow(dbConn DBConn, u User, ship ShipRow) (Ship, error) {
-	fmt.Printf("ShipRow: %+v\n", ship)
+func (s Ship) Run(ctx context.Context, conn DBConn, client spacetraders.AuthorizedClient) {
+	for {
+		log.Printf("%s:%s -- Collecting marketplace for location %s\n", s.Username, s.Id, s.Location)
 
-	return Ship{
-		dbConn:       dbConn,
-		user:         u,
-		Id:           ship.ShipId,
-		location:     ship.Location,
-		ShipMessages: u.ShipMessages,
-		Role:         Scout,
-	}, nil
-}
-
-func (s Ship) Run(ctx context.Context) <-chan error {
-	exit := make(chan error)
-	go func() {
-		for {
-			log.Printf("%s -- Collecting marketplace for location %s\n", s.user.Username, s.location)
-
-			fmt.Printf("Ship: %+v\n", s)
-			marketplace, err := s.user.Client.GetLocationMarketplace(ctx, s.location)
-			if err != nil {
-				exit <- err
-				// TODO: return or continue
-				return
-			}
-
-			if err := SaveLocationMarketplaceResponses(ctx, s.dbConn, s.location, marketplace); err != nil {
-				log.Printf("%s -- Unable to collect marketplace data\n", s.user.Username)
-				exit <- err
-				// TODO: return or continue
-				return
-			}
-
-			// Phase 1: Fill up on fuel and fly to each location collecting marketplace data
-
-			// locations, err := s.user.Client.GetSystemLocations(ctx, "OE")
-			// if err != nil {
-			// 	exit <- err
-			// 	// TODO: return or continue
-			// 	return
-			// }
-
-			log.Printf("%s -- Saved marketplace data for location %s\n", s.user.Username, s.location)
-
-			// s.ShipMessages <- ShipMessage{
-			// 	Type:       UpdateCredits,
-			// 	NewCredits: 100000,
-			// }
-
-			time.Sleep(60 * time.Second)
+		marketplace, err := client.GetLocationMarketplace(ctx, s.Location)
+		if err != nil {
+			// TODO: return or continue
+			return
 		}
-	}()
 
-	return exit
+		if err := SaveLocationMarketplaceResponses(ctx, conn, s.Location, marketplace); err != nil {
+			log.Printf("%s:%s -- Unable to collect marketplace data\n", s.Username, s.Id)
+			// TODO: return or continue
+			return
+		}
+
+		// Phase 1: Fill up on fuel and fly to each location collecting marketplace data
+
+		// locations, err := s.user.Client.GetSystemLocations(ctx, "OE")
+		// if err != nil {
+		// 	exit <- err
+		// 	// TODO: return or continue
+		// 	return
+		// }
+
+		log.Printf("%s:%s -- Saved marketplace data for location %s\n", s.Username, s.Id, s.Location)
+
+		// s.ShipMessages <- ShipMessage{
+		// 	Type:       UpdateCredits,
+		// 	NewCredits: 100000,
+		// }
+
+		time.Sleep(60 * time.Second)
+	}
 }

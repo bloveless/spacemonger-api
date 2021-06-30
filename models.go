@@ -2,20 +2,7 @@ package spacemonger
 
 import (
 	"time"
-
-	"spacemonger/spacetraders"
 )
-
-type UserRow struct {
-	Id               string
-	Username         string
-	Token            string
-	NewShipRoleData  RoleData
-	ShipMachines     []struct{}
-	Loans            []spacetraders.Loan
-	OutstandingLoans int
-	Credits          int
-}
 
 type RoleData struct {
 	Role     string `json:"role"`
