@@ -241,7 +241,7 @@ func GetSystemLocationsFromLocation(ctx context.Context, conn DbConn, location s
 	return locations, nil
 }
 
-func SaveFlightPlan(ctx context.Context, conn DbConn, userId string, flightPlan spacetraders.FlightPlan) error {
+func SaveFlightPlan(ctx context.Context, conn DbConn, userId string, flightPlan DbFlightPlan) error {
 	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_flight_plan (
 			 id
@@ -254,18 +254,20 @@ func SaveFlightPlan(ctx context.Context, conn DbConn, userId string, flightPlan 
 			,fuel_remaining
 			,time_remaining_in_seconds
 			,arrives_at
-		) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10);
+			,created_at
+		) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11);
 		`,
 		flightPlan.Id,
 		userId,
 		flightPlan.ShipId,
-		flightPlan.Departure,
+		flightPlan.Origin,
 		flightPlan.Destination,
 		flightPlan.Distance,
 		flightPlan.FuelConsumed,
 		flightPlan.FuelRemaining,
 		flightPlan.TimeRemainingInSeconds,
 		flightPlan.ArrivesAt,
+		flightPlan.CreatedAt,
 	)
 
 	return err

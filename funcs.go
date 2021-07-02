@@ -4,9 +4,74 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"spacemonger/spacetraders"
 )
+
+type FlightPlan struct {
+	Id                     string
+	ShipId                 string
+	FuelConsumed           int
+	FuelRemaining          int
+	TimeRemainingInSeconds int
+	CreatedAt              time.Time
+	ArrivesAt              time.Time
+	TerminatedAt           time.Time
+	Destination            string
+	Origin                 string
+	Distance               int
+}
+
+func CreateFlightPlan(ctx context.Context, client spacetraders.AuthorizedClient, conn DbConn, u User, s *Ship, destination string) (FlightPlan, error) {
+	flightPlanResp, err := client.CreateFlightPlan(ctx, s.Id, destination)
+	if err != nil {
+		return FlightPlan{}, err
+	}
+
+	s.Location = ""
+	var newCargo []Cargo
+	for _, c := range s.Cargo {
+		if c.Good == GoodFuel {
+			c.Quantity -= flightPlanResp.FlightPlan.FuelConsumed
+		}
+
+		newCargo = append(newCargo, c)
+	}
+
+	s.Cargo = newCargo
+
+	err = SaveFlightPlan(ctx, conn, u.Id, DbFlightPlan{
+		Id:                     flightPlanResp.FlightPlan.Id,
+		UserId:                 u.Id,
+		ShipId:                 s.Id,
+		Origin:                 flightPlanResp.FlightPlan.Departure,
+		Destination:            flightPlanResp.FlightPlan.Destination,
+		Distance:               flightPlanResp.FlightPlan.Distance,
+		FuelConsumed:           flightPlanResp.FlightPlan.FuelConsumed,
+		FuelRemaining:          flightPlanResp.FlightPlan.FuelRemaining,
+		TimeRemainingInSeconds: flightPlanResp.FlightPlan.TimeRemainingInSeconds,
+		ArrivesAt:              flightPlanResp.FlightPlan.ArrivesAt,
+		CreatedAt:              flightPlanResp.FlightPlan.CreatedAt,
+	})
+	if err != nil {
+		return FlightPlan{}, err
+	}
+
+	return FlightPlan{
+		Id:                     flightPlanResp.FlightPlan.Id,
+		ShipId:                 s.Id,
+		FuelConsumed:           flightPlanResp.FlightPlan.FuelConsumed,
+		FuelRemaining:          flightPlanResp.FlightPlan.FuelRemaining,
+		TimeRemainingInSeconds: flightPlanResp.FlightPlan.TimeRemainingInSeconds,
+		CreatedAt:              flightPlanResp.FlightPlan.CreatedAt,
+		ArrivesAt:              flightPlanResp.FlightPlan.ArrivesAt,
+		TerminatedAt:           flightPlanResp.FlightPlan.TerminatedAt,
+		Origin:                 flightPlanResp.FlightPlan.Departure,
+		Destination:            flightPlanResp.FlightPlan.Destination,
+		Distance:               flightPlanResp.FlightPlan.Distance,
+	}, nil
+}
 
 // PurchaseFastestShip will attempt to purchase a new ship for the user. If no ship was able to be purchased then the
 // original unmodified user will be returned along with the error.
@@ -166,7 +231,3 @@ func PurchaseShip(ctx context.Context, u User, system string, shipType string) (
 
 	return s.Ship, s.Credits, nil
 }
-
-// func PurchaseLargestShip(u User) (User, error) {
-//
-// }

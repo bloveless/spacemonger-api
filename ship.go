@@ -38,6 +38,30 @@ func (s Ship) Run(ctx context.Context, conn DbConn, client spacetraders.Authoriz
 		}
 
 		if s.RoleData.Role == "Scout" {
+
+			if s.Location != s.RoleData.Location {
+				// Empty cargo
+				for _, c := range s.Cargo {
+					resp, err := client.CreateSellOrder(ctx, s.Id, c.Good, c.Quantity)
+					if err != nil {
+						// TODO: How should we handle errors? Send a message and restart the loop?
+						//       For now I guess I'll just print it and continue
+						log.Printf("%s:%s -- ERROR During create sell order: %v", s.Username, s.Id, err)
+						continue
+					}
+
+					s.Messages <- ShipMessage{
+						Type:       UpdateCredits,
+						NewCredits: resp.Credits,
+					}
+				}
+
+				// Purchase fuel
+				// Move to location
+				// Wait for arrival
+				// Begin harvesting
+			}
+
 			log.Printf("%s:%s -- Scout is currently assigned to location %s in system %s\n", s.Username, s.Id, s.RoleData.Location, s.RoleData.System)
 
 			log.Printf("%s:%s -- Collecting marketplace for location %s\n", s.Username, s.Id, s.Location)

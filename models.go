@@ -48,7 +48,7 @@ type DbFlightPlan struct {
 	ShipId                 string
 	Origin                 string
 	Destination            string
-	Distance               float64
+	Distance               int
 	FuelConsumed           int
 	FuelRemaining          int
 	TimeRemainingInSeconds int

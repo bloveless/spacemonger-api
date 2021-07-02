@@ -35,17 +35,17 @@ type Loan struct {
 }
 
 type FlightPlan struct {
-	Id                     string `json:"id"`
-	ShipId                 string `json:"shipId"`
-	FuelConsumed           int    `json:"fuelConsumed"`
-	FuelRemaining          int    `json:"fuelRemaining"`
-	TimeRemainingInSeconds int    `json:"timeRemainingInSeconds"`
-	CreatedAt              int    `json:"createdAt"`
-	ArrivesAt              int    `json:"arrivesAt"`
-	TerminatedAt           int    `json:"terminatedAt"`
-	Destination            string `json:"destination"`
-	Departure              string `json:"departure"`
-	Distance               int    `json:"distance"`
+	Id                     string    `json:"id"`
+	ShipId                 string    `json:"shipId"`
+	FuelConsumed           int       `json:"fuelConsumed"`
+	FuelRemaining          int       `json:"fuelRemaining"`
+	TimeRemainingInSeconds int       `json:"timeRemainingInSeconds"`
+	CreatedAt              time.Time `json:"createdAt"`
+	ArrivesAt              time.Time `json:"arrivesAt"`
+	TerminatedAt           time.Time `json:"terminatedAt"`
+	Destination            string    `json:"destination"`
+	Departure              string    `json:"departure"`
+	Distance               int       `json:"distance"`
 }
 
 type Structure struct {
