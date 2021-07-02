@@ -9,13 +9,13 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
-type DBConn interface {
+type DbConn interface {
 	Exec(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
 
-func GetUser(ctx context.Context, conn DBConn, username string) (User, error) {
+func GetUser(ctx context.Context, conn DbConn, username string) (User, error) {
 	u := User{}
 	err := conn.QueryRow(ctx, `
 		SELECT id::text, username, token, new_ship_role_data FROM daemon_user
@@ -33,7 +33,7 @@ func GetUser(ctx context.Context, conn DBConn, username string) (User, error) {
 }
 
 // SaveUser saves the user to the DB and returns a new user with the Id field populated
-func SaveUser(ctx context.Context, conn DBConn, user User) (User, error) {
+func SaveUser(ctx context.Context, conn DbConn, user User) (User, error) {
 	err := conn.QueryRow(ctx, `
 		INSERT INTO daemon_user (username, token, new_ship_role_data)
 		VALUES ($1, $2, $3)
@@ -47,7 +47,49 @@ func SaveUser(ctx context.Context, conn DBConn, user User) (User, error) {
 	return user, err
 }
 
-func GetShips(ctx context.Context, conn DBConn, userId string) ([]ShipRow, error) {
+func GetShip(ctx context.Context, conn DbConn, shipId string) (DbShip, error) {
+	s := DbShip{}
+
+	err := conn.QueryRow(ctx, `
+		SELECT
+			 user_id
+			,ship_id
+			,type
+			,class
+			,max_cargo
+			,loading_speed
+			,speed
+			,manufacturer
+			,plating
+			,weapons
+			,role_data
+			,location
+		FROM daemon_user_ship
+		WHERE ship_id = $1;
+		`,
+		shipId,
+	).Scan(
+		&s.UserId,
+		&s.ShipId,
+		&s.Type,
+		&s.Class,
+		&s.MaxCargo,
+		&s.LoadingSpeed,
+		&s.Speed,
+		&s.Manufacturer,
+		&s.Plating,
+		&s.Weapons,
+		&s.RoleData,
+		&s.Location,
+	)
+	if err != nil {
+		return DbShip{}, err
+	}
+
+	return s, nil
+}
+
+func GetShips(ctx context.Context, conn DbConn, userId string) ([]DbShip, error) {
 	rows, err := conn.Query(ctx, `
 		SELECT
 			 user_id
@@ -63,17 +105,17 @@ func GetShips(ctx context.Context, conn DBConn, userId string) ([]ShipRow, error
 			,role_data
 			,location
 		FROM daemon_user_ship
-		WHERE user_id = $1
+		WHERE user_id = $1;
 		`,
 		userId,
 	)
 	if err != nil {
-		return []ShipRow{}, err
+		return []DbShip{}, err
 	}
 
-	var ships []ShipRow
+	var ships []DbShip
 	for rows.Next() {
-		s := ShipRow{}
+		s := DbShip{}
 
 		err := rows.Scan(
 			&s.UserId,
@@ -90,7 +132,7 @@ func GetShips(ctx context.Context, conn DBConn, userId string) ([]ShipRow, error
 			&s.Location,
 		)
 		if err != nil {
-			return []ShipRow{}, err
+			return []DbShip{}, err
 		}
 
 		ships = append(ships, s)
@@ -99,7 +141,7 @@ func GetShips(ctx context.Context, conn DBConn, userId string) ([]ShipRow, error
 	return ships, nil
 }
 
-func SaveSystem(ctx context.Context, conn DBConn, system spacetraders.GetSystemResponse) error {
+func SaveSystem(ctx context.Context, conn DbConn, system spacetraders.GetSystemResponse) error {
 	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_system(system, name) VALUES ($1, $2)
 		ON CONFLICT (system)
@@ -113,8 +155,8 @@ func SaveSystem(ctx context.Context, conn DBConn, system spacetraders.GetSystemR
 	return err
 }
 
-func GetLocation(ctx context.Context, conn DBConn, location string) (LocationRow, error) {
-	l := LocationRow{}
+func GetLocation(ctx context.Context, conn DbConn, location string) (DbLocation, error) {
+	l := DbLocation{}
 	err := conn.QueryRow(ctx, `
 		SELECT
 			 system
@@ -139,13 +181,13 @@ func GetLocation(ctx context.Context, conn DBConn, location string) (LocationRow
 	)
 
 	if err != nil {
-		return LocationRow{}, err
+		return DbLocation{}, err
 	}
 
 	return l, nil
 }
 
-func SaveLocation(ctx context.Context, conn DBConn, location LocationRow) error {
+func SaveLocation(ctx context.Context, conn DbConn, location DbLocation) error {
 	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_location (system, location, location_name, location_type, x, y)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -167,7 +209,7 @@ func SaveLocation(ctx context.Context, conn DBConn, location LocationRow) error 
 	return err
 }
 
-func GetSystemLocationsFromLocation(ctx context.Context, conn DBConn, location string) ([]string, error) {
+func GetSystemLocationsFromLocation(ctx context.Context, conn DbConn, location string) ([]string, error) {
 	rows, err := conn.Query(ctx, `
 		SELECT
 			dl1.location
@@ -199,7 +241,7 @@ func GetSystemLocationsFromLocation(ctx context.Context, conn DBConn, location s
 	return locations, nil
 }
 
-func SaveFlightPlan(ctx context.Context, conn DBConn, userId string, flightPlan spacetraders.FlightPlan) error {
+func SaveFlightPlan(ctx context.Context, conn DbConn, userId string, flightPlan spacetraders.FlightPlan) error {
 	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_flight_plan (
 			 id
@@ -229,8 +271,8 @@ func SaveFlightPlan(ctx context.Context, conn DBConn, userId string, flightPlan 
 	return err
 }
 
-func GetActiveFlightPlan(ctx context.Context, conn DBConn, shipId string) (FlightPlanRow, error) {
-	r := FlightPlanRow{}
+func GetActiveFlightPlan(ctx context.Context, conn DbConn, shipId string) (DbFlightPlan, error) {
+	r := DbFlightPlan{}
 	err := conn.QueryRow(ctx, `
 		SELECT
 			 id
@@ -251,14 +293,14 @@ func GetActiveFlightPlan(ctx context.Context, conn DBConn, shipId string) (Fligh
 		shipId,
 	).Scan(&r.Id, &r.ShipId, &r.Origin, &r.Destination, &r.FuelConsumed, &r.FuelRemaining, &r.TimeRemainingInSeconds, &r.CreatedAt, &r.Distance, &r.ArrivesAt, &r.UserId)
 	if err != nil {
-		return FlightPlanRow{}, err
+		return DbFlightPlan{}, err
 	}
 
 	return r, nil
 }
 
-func GetDistanceBetweenLocations(ctx context.Context, conn DBConn, origin, destination string) (DistanceBetweenLocationsRow, error) {
-	r := DistanceBetweenLocationsRow{}
+func GetDistanceBetweenLocations(ctx context.Context, conn DbConn, origin, destination string) (DbDistanceBetweenLocations, error) {
+	r := DbDistanceBetweenLocations{}
 	err := conn.QueryRow(ctx, `
 		SELECT
 			 dsi1.location_type as origin_location_type
@@ -276,13 +318,13 @@ func GetDistanceBetweenLocations(ctx context.Context, conn DBConn, origin, desti
 	).Scan(&r.originLocationType, &r.distance)
 
 	if err != nil {
-		return DistanceBetweenLocationsRow{}, err
+		return DbDistanceBetweenLocations{}, err
 	}
 
 	return r, nil
 }
 
-func SaveLocationMarketplaceResponses(ctx context.Context, conn DBConn, location string, marketplaceData spacetraders.GetLocationMarketplaceResponse) error {
+func SaveLocationMarketplaceResponses(ctx context.Context, conn DbConn, location string, marketplaceData spacetraders.GetLocationMarketplaceResponse) error {
 	for _, m := range marketplaceData.Marketplace {
 		_, err := conn.Exec(ctx, `
 			INSERT INTO daemon_marketplace(location, good, purchase_price_per_unit, sell_price_per_unit, volume_per_unit, quantity_available)
@@ -331,8 +373,8 @@ func SaveLocationMarketplaceResponses(ctx context.Context, conn DBConn, location
 	return nil
 }
 
-func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, shipSpeed int) ([]RouteRow, error) {
-	var routes []RouteRow
+func GetRoutesFromLocation(ctx context.Context, conn DbConn, location string, shipSpeed int) ([]DbRoute, error) {
+	var routes []DbRoute
 
 	rows, err := conn.Query(ctx, `
 		-- calculate the route from each location to each location per good
@@ -361,12 +403,12 @@ func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, sh
 		location,
 	)
 	if err != nil {
-		return []RouteRow{}, err
+		return []DbRoute{}, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		r := RouteRow{}
+		r := DbRoute{}
 		err = rows.Scan(
 			&r.PurchaseLocation,
 			&r.PurchaseLocationType,
@@ -380,7 +422,7 @@ func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, sh
 			&r.VolumePerUnit,
 		)
 		if err != nil {
-			return []RouteRow{}, err
+			return []DbRoute{}, err
 		}
 
 		profit := float64(r.SellPricePerUnit - r.PurchasePricePerUnit)
@@ -393,18 +435,8 @@ func GetRoutesFromLocation(ctx context.Context, conn DBConn, location string, sh
 	return routes, nil
 }
 
-func SaveShip(ctx context.Context, conn DBConn, username string, ship ShipRow) (Ship, error) {
-	s := Ship{
-		Username:     username,
-		Id:           ship.ShipId,
-		Location:     ship.Location,
-		LoadingSpeed: ship.LoadingSpeed,
-		MaxCargo:     ship.MaxCargo,
-		Cargo:        []Cargo{},
-		RoleData:     ship.RoleData,
-	}
-
-	err := conn.QueryRow(ctx, `
+func SaveShip(ctx context.Context, conn DbConn, user User, ship DbShip) error {
+	_, err := conn.Exec(ctx, `
 		INSERT INTO daemon_user_ship (
 			 user_id
 			,ship_id
@@ -445,10 +477,9 @@ func SaveShip(ctx context.Context, conn DBConn, username string, ship ShipRow) (
 			-- Don't update role data on conflict. This way if a ship is re-assigned something other than the default
 			-- after its initial create it will remain that way but new ships will receive the default assignment
 			,location = $12
-			,modified_at = timezone('utc', NOW())
-		RETURNING role_data;
+			,modified_at = timezone('utc', NOW());
 		`,
-		ship.UserId,
+		user.Id,
 		ship.ShipId,
 		ship.Type,
 		ship.Class,
@@ -460,11 +491,11 @@ func SaveShip(ctx context.Context, conn DBConn, username string, ship ShipRow) (
 		ship.Weapons,
 		ship.RoleData,
 		ship.Location,
-	).Scan(&s.RoleData)
+	)
 
 	if err != nil {
-		return s, err
+		return err
 	}
 
-	return s, nil
+	return nil
 }

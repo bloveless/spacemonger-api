@@ -68,6 +68,8 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 	}
 	user.Credits = info.User.Credits
 
+	log.Printf("%s -- User Credits %d\n", user.Credits)
+
 	apiLoans, err := user.Client.GetMyLoans(ctx)
 	if err != nil {
 		return User{}, err
@@ -80,6 +82,8 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 
 	user.Loans = loans
 
+	log.Printf("%s -- User Loans %+v\n", user.Loans)
+
 	outstandingLoans := 0
 	for _, l := range loans {
 		if !strings.Contains(l.Status, "PAID") {
@@ -88,39 +92,79 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 	}
 	user.OutstandingLoans = outstandingLoans
 
+	log.Printf("%s -- User Outstanding Loans %d\n", user.OutstandingLoans)
+
 	apiShips, err := user.Client.GetMyShips(ctx)
 	if err != nil {
 		return User{}, err
 	}
 
-	for _, apiShip := range apiShips.Ships {
-		sr := ShipRow{
-			UserId:       user.Id,
-			ShipId:       apiShip.Id,
-			Type:         apiShip.Type,
-			Class:        apiShip.Class,
-			MaxCargo:     apiShip.MaxCargo,
-			LoadingSpeed: apiShip.LoadingSpeed,
-			Speed:        apiShip.Speed,
-			Manufacturer: apiShip.Manufacturer,
-			Plating:      apiShip.Plating,
-			Weapons:      apiShip.Weapons,
-			// If this is a new ship then the new user role data will be used, if the ship exists it will not be altered
-			RoleData: newShipRoleData,
-			Location: apiShip.Location,
-		}
+	log.Printf("%s -- User Api Ships %+v\n", apiShips)
 
-		ship, err := SaveShip(ctx, pool, user.Username, sr)
-		if err != nil {
-			return User{}, err
-		}
-
-		for _, c := range apiShip.Cargo {
-			ship.Cargo = append(ship.Cargo, Cargo(c))
-		}
-
-		user.Ships = append(user.Ships, ship)
+	dbShips, err := GetShips(ctx, pool, user.Id)
+	if err != nil {
+		return User{}, err
 	}
+
+	log.Printf("%s -- User Db Ships %+v\n", dbShips)
+
+	// Save/Update any ships that the user might not have saved in the DB yet
+	for _, apiShip := range apiShips.Ships {
+		shipExists := false
+		roleData := newShipRoleData
+		for _, dbShip := range dbShips {
+			if apiShip.Id == dbShip.ShipId {
+				roleData = dbShip.RoleData
+				shipExists = true
+
+				log.Printf("%s:%s -- Ship exists and has role data %+v\n", user.Username, dbShip.ShipId, roleData)
+
+				break
+			}
+		}
+
+		if !shipExists {
+			dbShip := DbShip{
+				UserId:       user.Id,
+				ShipId:       apiShip.Id,
+				Type:         apiShip.Type,
+				Class:        apiShip.Class,
+				MaxCargo:     apiShip.MaxCargo,
+				LoadingSpeed: apiShip.LoadingSpeed,
+				Speed:        apiShip.Speed,
+				Manufacturer: apiShip.Manufacturer,
+				Plating:      apiShip.Plating,
+				Weapons:      apiShip.Weapons,
+				// If this is a new ship then the new user role data will be used, if the ship exists it will not be altered
+				RoleData: roleData,
+				Location: apiShip.Location,
+			}
+
+			log.Printf("%s:%s -- Ship did not exist and was created with role data %+v\n", user.Username, dbShip.ShipId, roleData)
+
+			err = SaveShip(ctx, pool, user, dbShip)
+			if err != nil {
+				return User{}, err
+			}
+		}
+
+		s := Ship{
+			Username:     user.Username,
+			Id:           apiShip.Id,
+			Location:     apiShip.Location,
+			LoadingSpeed: apiShip.LoadingSpeed,
+			MaxCargo:     apiShip.MaxCargo,
+			RoleData:     roleData,
+		}
+
+		for _, cargo := range apiShip.Cargo {
+			s.Cargo = append(s.Cargo, Cargo(cargo))
+		}
+
+		user.Ships = append(user.Ships, s)
+	}
+
+	log.Printf("%s -- User Ships %+v\n", user.Username, user.Ships)
 
 	if user.Credits == 0 {
 		createLoanResponse, err := user.Client.CreateLoan(ctx, spacetraders.StartUpLoan)
@@ -128,8 +172,13 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 			return User{}, err
 		}
 
+		log.Printf("%s -- User took out new loan %+v\n", user.Username, createLoanResponse)
+
 		user.Loans = append(user.Loans, Loan(createLoanResponse.Loan))
 		user.Credits = createLoanResponse.Credits
+
+		log.Printf("%s -- User Loans %+v\n", user.Loans)
+		log.Printf("%s -- User Credits %+v\n", user.Credits)
 
 		outstandingLoans := 0
 		for _, l := range user.Loans {
@@ -139,7 +188,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 		}
 		user.OutstandingLoans = outstandingLoans
 
-		log.Printf("New Loan: %+v\n", createLoanResponse)
+		log.Printf("%s -- User Outstanding Loans %d\n", user.Username, user.OutstandingLoans)
 	}
 
 	return user, nil

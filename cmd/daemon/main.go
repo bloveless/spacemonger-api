@@ -110,7 +110,7 @@ func main() {
 	log.Printf("System Locations: %+v\n", systemLocations)
 
 	for _, location := range systemLocations.Locations {
-		err = spacemonger.SaveLocation(ctx, app.dbPool, spacemonger.LocationRow{
+		err = spacemonger.SaveLocation(ctx, app.dbPool, spacemonger.DbLocation{
 			System:       "OE",
 			Location:     location.Symbol,
 			LocationName: location.Name,
@@ -130,9 +130,6 @@ func main() {
 	// from both locations then it might be able to make a profitable trade. Try and expand this algorithm to the 3 or 4
 	// closest locations and pick trade routes within those
 
-	// our first implementation will be a simple one just loop through all the users ships one at a time and process their
-	// next step
-
 	exit := make(chan struct{}, 1)
 	ships := make(chan spacemonger.Ship, 3)
 
@@ -142,6 +139,98 @@ func main() {
 			go func() {
 				ship.Run(ctx, app.dbPool, user.Client)
 			}()
+		}
+	}()
+
+	go func() {
+		for {
+			// First the user needs to add all of it's ships to the ships channel
+			for _, s := range user.Ships {
+				ships <- s
+			}
+
+			shipMessages := make(chan spacemonger.ShipMessage, 10)
+
+			for {
+				// Next the user needs to process any rules that need processing.
+				// I.E. If the user has > 50k credits then buy as many cheap ships for probes as possible
+				if user.Credits > 50_000 && len(user.Ships) < 20 {
+					newShip, newCredits, err := spacemonger.PurchaseShip(ctx, user, "OE", "JW-MK-I")
+					if err != nil {
+						panic(err)
+					}
+
+					var newCargo []spacemonger.Cargo
+					for _, c := range newShip.Cargo {
+						newCargo = append(newCargo, spacemonger.Cargo(c))
+					}
+
+					// The users first ship will be a trader...
+					roleData := spacemonger.RoleData{Role: "Trader", System: "OE"}
+					if len(user.Ships) > 0 {
+						// After that we will assign each new Scout to an unassigned location
+						roleData.Role = "Scout"
+						foundScoutLocation := false
+
+						for _, l := range systemLocations.Locations {
+							foundAssignedScout := false
+							for _, s := range user.Ships {
+								if s.RoleData.Role == "Scout" && s.RoleData.Location == l.Symbol {
+									foundAssignedScout = true
+									break
+								}
+							}
+
+							if !foundAssignedScout {
+								roleData.Location = l.Symbol
+								foundScoutLocation = true
+								break
+							}
+						}
+
+						if !foundScoutLocation {
+							// If we were unable to find a scout location assume that every location has a scout assigned and that this ship should be a trader
+							roleData.Role = "Trader"
+							roleData.System = "OE"
+							roleData.Location = ""
+						}
+					}
+
+					s := spacemonger.Ship{
+						Username:     user.Username,
+						Id:           newShip.Id,
+						Location:     newShip.Location,
+						LoadingSpeed: newShip.LoadingSpeed,
+						MaxCargo:     newShip.MaxCargo,
+						Cargo:        newCargo,
+						RoleData:     roleData,
+					}
+
+					spacemonger.SaveShip(ctx, app.dbPool, user, spacemonger.DbShip{
+						UserId:       user.Id,
+						ShipId:       newShip.Id,
+						Type:         newShip.Type,
+						Class:        newShip.Class,
+						MaxCargo:     newShip.MaxCargo,
+						LoadingSpeed: newShip.LoadingSpeed,
+						Speed:        newShip.Speed,
+						Manufacturer: newShip.Manufacturer,
+						Plating:      newShip.Plating,
+						Weapons:      newShip.Weapons,
+						RoleData:     roleData,
+						Location:     newShip.Location,
+					})
+
+					ships <- s
+
+					user.Credits = newCredits
+					user.Ships = append(user.Ships, s)
+				}
+
+				// Wait for a message to come back from a ship and run the rules again
+				<-shipMessages
+			}
+
 		}
 	}()
 

@@ -10,7 +10,7 @@ type RoleData struct {
 	Location string `json:"location"`
 }
 
-type ShipRow struct {
+type DbShip struct {
 	UserId       string
 	ShipId       string
 	Type         string
@@ -27,7 +27,7 @@ type ShipRow struct {
 	CreatedAt    time.Time
 }
 
-type LocationRow struct {
+type DbLocation struct {
 	System       string
 	Location     string
 	LocationName string
@@ -37,12 +37,12 @@ type LocationRow struct {
 	CreatedAt    time.Time
 }
 
-type DistanceBetweenLocationsRow struct {
+type DbDistanceBetweenLocations struct {
 	originLocationType string
 	distance           float64
 }
 
-type FlightPlanRow struct {
+type DbFlightPlan struct {
 	Id                     string
 	UserId                 string
 	ShipId                 string
@@ -56,7 +56,7 @@ type FlightPlanRow struct {
 	CreatedAt              time.Time
 }
 
-type RouteRow struct {
+type DbRoute struct {
 	PurchaseLocation          string
 	PurchaseLocationType      string
 	SellLocation              string
