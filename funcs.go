@@ -141,6 +141,10 @@ func PurchaseShip(ctx context.Context, u User, system string, shipType string) (
 				continue
 			}
 
+			if availableShip.Type != shipType {
+				continue
+			}
+
 			foundShip = true
 			shipPrice = purchaseLocation.Price
 			shipLocation = purchaseLocation.Location
@@ -154,8 +158,11 @@ func PurchaseShip(ctx context.Context, u User, system string, shipType string) (
 	log.Printf("%s -- Buying ship %s for %d at location %s\n", u.Username, shipType, shipPrice, shipLocation)
 	s, err := u.Client.PurchaseShip(ctx, shipLocation, shipType)
 	if err != nil {
+		log.Printf("%s -- Error puchasing ship %v", u.Username, err)
 		return spacetraders.Ship{}, 0, err
 	}
+
+	log.Printf("%s -- User purchased ship %+v\n", u.Username, s)
 
 	return s.Ship, s.Credits, nil
 }

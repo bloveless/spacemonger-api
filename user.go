@@ -68,7 +68,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 	}
 	user.Credits = info.User.Credits
 
-	log.Printf("%s -- User Credits %d\n", user.Credits)
+	log.Printf("%s -- User Credits %d\n", user.Username, user.Credits)
 
 	apiLoans, err := user.Client.GetMyLoans(ctx)
 	if err != nil {
@@ -82,7 +82,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 
 	user.Loans = loans
 
-	log.Printf("%s -- User Loans %+v\n", user.Loans)
+	log.Printf("%s -- User Loans %+v\n", user.Username, user.Loans)
 
 	outstandingLoans := 0
 	for _, l := range loans {
@@ -92,21 +92,21 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 	}
 	user.OutstandingLoans = outstandingLoans
 
-	log.Printf("%s -- User Outstanding Loans %d\n", user.OutstandingLoans)
+	log.Printf("%s -- User Outstanding Loans %d\n", user.Username, user.OutstandingLoans)
 
 	apiShips, err := user.Client.GetMyShips(ctx)
 	if err != nil {
 		return User{}, err
 	}
 
-	log.Printf("%s -- User Api Ships %+v\n", apiShips)
+	log.Printf("%s -- User Api Ships %+v\n", user.Username, apiShips)
 
 	dbShips, err := GetShips(ctx, pool, user.Id)
 	if err != nil {
 		return User{}, err
 	}
 
-	log.Printf("%s -- User Db Ships %+v\n", dbShips)
+	log.Printf("%s -- User Db Ships %+v\n", user.Username, dbShips)
 
 	// Save/Update any ships that the user might not have saved in the DB yet
 	for _, apiShip := range apiShips.Ships {
@@ -177,8 +177,8 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 		user.Loans = append(user.Loans, Loan(createLoanResponse.Loan))
 		user.Credits = createLoanResponse.Credits
 
-		log.Printf("%s -- User Loans %+v\n", user.Loans)
-		log.Printf("%s -- User Credits %+v\n", user.Credits)
+		log.Printf("%s -- User Loans %+v\n", user.Username, user.Loans)
+		log.Printf("%s -- User Credits %+v\n", user.Username, user.Credits)
 
 		outstandingLoans := 0
 		for _, l := range user.Loans {

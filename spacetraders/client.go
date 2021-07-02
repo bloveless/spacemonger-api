@@ -367,13 +367,13 @@ func (ac AuthorizedClient) PurchaseShip(ctx context.Context, location, shipType 
 	}
 	requestJson, err := json.Marshal(request)
 	if err != nil {
-		return PurchaseShipResponse{}, nil
+		return PurchaseShipResponse{}, err
 	}
 
 	response := PurchaseShipResponse{}
 	err = executeRequest(ctx, ac.client, "POST", ac.client.baseURL+"/my/ships", ac.token, bytes.NewReader(requestJson), &response)
 	if err != nil {
-		return PurchaseShipResponse{}, nil
+		return PurchaseShipResponse{}, err
 	}
 
 	return response, nil
@@ -383,7 +383,7 @@ func (ac AuthorizedClient) GetMyShip(ctx context.Context, shipId string) (GetMyS
 	response := GetMyShipRequest{}
 	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/my/ships/%s", shipId), ac.token, nil, &response)
 	if err != nil {
-		return GetMyShipRequest{}, nil
+		return GetMyShipRequest{}, err
 	}
 
 	return response, nil
@@ -393,7 +393,7 @@ func (ac AuthorizedClient) GetMyShips(ctx context.Context) (GetMyShipsResponse, 
 	response := GetMyShipsResponse{}
 	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+"/my/ships", ac.token, nil, &response)
 	if err != nil {
-		return GetMyShipsResponse{}, nil
+		return GetMyShipsResponse{}, err
 	}
 
 	return response, nil
@@ -406,7 +406,7 @@ func (ac AuthorizedClient) JettisonCargo(ctx context.Context, shipId string, goo
 	}
 	requestJson, err := json.Marshal(request)
 	if err != nil {
-		return JettisonCargoResponse{}, nil
+		return JettisonCargoResponse{}, err
 	}
 
 	response := JettisonCargoResponse{}
@@ -456,7 +456,7 @@ func (ac AuthorizedClient) GetSystemLocations(ctx context.Context, system string
 	response := GetSystemLocationsResponse{}
 	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/systems/%s/locations", system), ac.token, nil, &response)
 	if err != nil {
-		return GetSystemLocationsResponse{}, nil
+		return GetSystemLocationsResponse{}, err
 	}
 
 	return response, nil
@@ -466,7 +466,7 @@ func (ac AuthorizedClient) GetSystem(ctx context.Context, system string) (GetSys
 	response := GetSystemResponse{}
 	err := executeRequest(ctx, ac.client, "GET", ac.client.baseURL+fmt.Sprintf("/systems/%s", system), ac.token, nil, &response)
 	if err != nil {
-		return GetSystemResponse{}, nil
+		return GetSystemResponse{}, err
 	}
 
 	return response, nil

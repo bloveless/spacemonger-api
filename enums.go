@@ -4,6 +4,7 @@ type ShipMessageType int
 
 const (
 	UpdateCredits ShipMessageType = iota
+	Noop
 )
 
 type ShipMessage struct {
@@ -12,7 +13,7 @@ type ShipMessage struct {
 }
 
 func (mt ShipMessageType) String() string {
-	return [...]string{"UpdateCredits"}[mt]
+	return [...]string{"UpdateCredits", "Noop"}[mt]
 }
 
 type ShipRole int

@@ -28,7 +28,12 @@ type Ship struct {
 func (s Ship) Run(ctx context.Context, conn DbConn, client spacetraders.AuthorizedClient) {
 	for {
 		if s.RoleData.Role == "Trader" {
-			log.Println("%s:%s -- Traders don't do anything right now\n", s.Username, s.Id)
+			log.Printf("%s:%s -- Traders don't do anything right now\n", s.Username, s.Id)
+
+			s.Messages <- ShipMessage{
+				Type: Noop,
+			}
+
 			time.Sleep(60 * time.Second)
 		}
 
@@ -64,6 +69,10 @@ func (s Ship) Run(ctx context.Context, conn DbConn, client spacetraders.Authoriz
 			// 	Type:       UpdateCredits,
 			// 	NewCredits: 100000,
 			// }
+
+			s.Messages <- ShipMessage{
+				Type: Noop,
+			}
 
 			time.Sleep(60 * time.Second)
 		}

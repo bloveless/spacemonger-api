@@ -82,6 +82,8 @@ func main() {
 	}
 	log.Printf("Game Status: %+v\n", status)
 
+	log.Printf("App Config %+v\n", app.config)
+
 	user, err := spacemonger.InitializeUser(ctx, client, app.dbPool, app.config.Username, spacemonger.RoleData{Role: "Trader", System: "OE"})
 	if err != nil {
 		panic(err)
@@ -137,6 +139,7 @@ func main() {
 		for ship := range ships {
 			ship := ship
 			go func() {
+				log.Printf("%s:%s -- Starting process for ship\n", ship.Username, ship.Id)
 				ship.Run(ctx, app.dbPool, user.Client)
 			}()
 		}
@@ -144,21 +147,27 @@ func main() {
 
 	go func() {
 		for {
+			shipMessages := make(chan spacemonger.ShipMessage, 10)
+
 			// First the user needs to add all of it's ships to the ships channel
+			log.Printf("%s -- Users ships %+v\n", user.Username, user.Ships)
 			for _, s := range user.Ships {
+				s.Messages = shipMessages
 				ships <- s
 			}
-
-			shipMessages := make(chan spacemonger.ShipMessage, 10)
 
 			for {
 				// Next the user needs to process any rules that need processing.
 				// I.E. If the user has > 50k credits then buy as many cheap ships for probes as possible
+				log.Printf("%s -- User Credits %d\n", user.Username, user.Credits)
+				log.Printf("%s -- User Ships Length %d\n", user.Username, len(user.Ships))
 				if user.Credits > 50_000 && len(user.Ships) < 20 {
 					newShip, newCredits, err := spacemonger.PurchaseShip(ctx, user, "OE", "JW-MK-I")
 					if err != nil {
 						panic(err)
 					}
+
+					log.Printf("%s -- User purchased new ship %+v\n", user.Username, newShip)
 
 					var newCargo []spacemonger.Cargo
 					for _, c := range newShip.Cargo {
@@ -166,6 +175,7 @@ func main() {
 					}
 
 					// The users first ship will be a trader...
+					// TODO: The System "OE" shouldn't be hard coded here
 					roleData := spacemonger.RoleData{Role: "Trader", System: "OE"}
 					if len(user.Ships) > 0 {
 						// After that we will assign each new Scout to an unassigned location
@@ -176,6 +186,7 @@ func main() {
 							foundAssignedScout := false
 							for _, s := range user.Ships {
 								if s.RoleData.Role == "Scout" && s.RoleData.Location == l.Symbol {
+									log.Printf("%s -- Found scout %s assigned to location %s\n", user.Username, s.Id, l.Symbol)
 									foundAssignedScout = true
 									break
 								}
@@ -183,7 +194,12 @@ func main() {
 
 							if !foundAssignedScout {
 								roleData.Location = l.Symbol
+								// TODO: The system shouldn't be hard coded here
+								roleData.System = "OE"
 								foundScoutLocation = true
+
+								log.Printf("%s -- Assigning new scout %s to location %s\n", user.Username, newShip.Id, l.Symbol)
+
 								break
 							}
 						}
@@ -193,8 +209,14 @@ func main() {
 							roleData.Role = "Trader"
 							roleData.System = "OE"
 							roleData.Location = ""
+
+							log.Printf("%s:%s -- Unable to find location to assign scout to. Reverting scout to trader\n", user.Username, newShip.Id)
 						}
 					}
+
+					// TODO: It is possible that the container exists after buying a ship but before the ship is assigned a role and saved to the DB
+					//       The system should be able to correct that by determining that the ship doesn't have a role and performing the same procedure
+					//       as above in the InitializeUser method
 
 					s := spacemonger.Ship{
 						Username:     user.Username,
@@ -204,9 +226,10 @@ func main() {
 						MaxCargo:     newShip.MaxCargo,
 						Cargo:        newCargo,
 						RoleData:     roleData,
+						Messages:     shipMessages,
 					}
 
-					spacemonger.SaveShip(ctx, app.dbPool, user, spacemonger.DbShip{
+					err = spacemonger.SaveShip(ctx, app.dbPool, user, spacemonger.DbShip{
 						UserId:       user.Id,
 						ShipId:       newShip.Id,
 						Type:         newShip.Type,
@@ -220,6 +243,9 @@ func main() {
 						RoleData:     roleData,
 						Location:     newShip.Location,
 					})
+					if err != nil {
+						panic(err)
+					}
 
 					ships <- s
 
@@ -228,9 +254,12 @@ func main() {
 				}
 
 				// Wait for a message to come back from a ship and run the rules again
-				<-shipMessages
+				message := <-shipMessages
+				log.Printf("%s -- Received message from ship %+v", user.Username, message)
+				if message.Type == spacemonger.UpdateCredits {
+					user.Credits = message.NewCredits
+				}
 			}
-
 		}
 	}()
 
