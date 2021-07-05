@@ -149,12 +149,16 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 		}
 
 		s := Ship{
-			Username:     user.Username,
-			Id:           apiShip.Id,
-			Location:     apiShip.Location,
-			LoadingSpeed: apiShip.LoadingSpeed,
-			MaxCargo:     apiShip.MaxCargo,
-			RoleData:     roleData,
+			Username:       user.Username,
+			UserId:         user.Id,
+			Id:             apiShip.Id,
+			Type:           apiShip.Type,
+			Location:       apiShip.Location,
+			LoadingSpeed:   apiShip.LoadingSpeed,
+			Speed:          apiShip.Speed,
+			MaxCargo:       apiShip.MaxCargo,
+			SpaceAvailable: apiShip.SpaceAvailable,
+			RoleData:       roleData,
 		}
 
 		for _, cargo := range apiShip.Cargo {
@@ -195,7 +199,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 }
 
 func (u *User) ProcessShipMessage(m ShipMessage) error {
-	if m.Type == UpdateCredits {
+	if m.Type == ShipMessageUpdateCredits {
 		log.Printf("%s -- Updating credits to %d", u.Username, m.NewCredits)
 		u.Credits = m.NewCredits
 		return nil

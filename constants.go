@@ -3,17 +3,18 @@ package spacemonger
 type ShipMessageType int
 
 const (
-	UpdateCredits ShipMessageType = iota
-	Noop
+	ShipMessageUpdateCredits ShipMessageType = iota
+	ShipMessageNoop
 )
 
 type ShipMessage struct {
 	Type       ShipMessageType
+	ShipId     string
 	NewCredits int
 }
 
 func (mt ShipMessageType) String() string {
-	return [...]string{"UpdateCredits", "Noop"}[mt]
+	return [...]string{"ShipMessageUpdateCredits", "ShipMessageNoop"}[mt]
 }
 
 type ShipRole int

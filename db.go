@@ -2,6 +2,8 @@ package spacemonger
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"spacemonger/spacetraders"
 
@@ -139,6 +141,22 @@ func GetShips(ctx context.Context, conn DbConn, userId string) ([]DbShip, error)
 	}
 
 	return ships, nil
+}
+
+func UpdateShipLocation(ctx context.Context, conn DbConn, s Ship, location string) error {
+	_, err := conn.Exec(ctx, `
+		UPDATE daemon_user_ship
+		SET location = $2
+		WHERE ship_id = $1
+		`,
+		s.Id,
+		location,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func SaveSystem(ctx context.Context, conn DbConn, system spacetraders.GetSystemResponse) error {
@@ -293,6 +311,7 @@ func GetActiveFlightPlan(ctx context.Context, conn DbConn, shipId string) (DbFli
 			AND arrives_at > $2
 		`,
 		shipId,
+		time.Now(),
 	).Scan(&r.Id, &r.ShipId, &r.Origin, &r.Destination, &r.FuelConsumed, &r.FuelRemaining, &r.TimeRemainingInSeconds, &r.CreatedAt, &r.Distance, &r.ArrivesAt, &r.UserId)
 	if err != nil {
 		return DbFlightPlan{}, err
@@ -375,7 +394,7 @@ func SaveLocationMarketplaceResponses(ctx context.Context, conn DbConn, location
 	return nil
 }
 
-func GetRoutesFromLocation(ctx context.Context, conn DbConn, location string, shipSpeed int) ([]DbRoute, error) {
+func GetRoutesFromLocation(ctx context.Context, conn DbConn, location string) ([]DbRoute, error) {
 	var routes []DbRoute
 
 	rows, err := conn.Query(ctx, `
@@ -426,10 +445,6 @@ func GetRoutesFromLocation(ctx context.Context, conn DbConn, location string, sh
 		if err != nil {
 			return []DbRoute{}, err
 		}
-
-		profit := float64(r.SellPricePerUnit - r.PurchasePricePerUnit)
-		r.CostVolumeDistance = profit / float64(r.VolumePerUnit) / r.Distance
-		r.ProfitSpeedVolumeDistance = (profit * float64(shipSpeed)) / (float64(r.VolumePerUnit) * r.Distance)
 
 		routes = append(routes, r)
 	}
@@ -497,6 +512,108 @@ func SaveShip(ctx context.Context, conn DbConn, user User, ship DbShip) error {
 
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func GetFuelRequired(ctx context.Context, conn DbConn, origin string, destination string, shipType string) (int, error) {
+	fuelRequired := 0
+
+	err := conn.QueryRow(ctx, `
+		SELECT fuel_consumed
+        FROM daemon_flight_plan dfp
+        INNER JOIN daemon_user_ship dus
+            ON dus.ship_id = dfp.ship_id
+        WHERE dfp.origin = $1
+            AND dfp.destination = $2
+            AND dus.type = $3
+        LIMIT 1
+		`,
+		origin,
+		destination,
+		shipType,
+	).Scan(&fuelRequired)
+	if err != nil {
+		return 0, err
+	}
+
+	return fuelRequired, nil
+}
+
+func SaveUserStats(ctx context.Context, conn DbConn, u User) error {
+	type ship struct {
+		Id           string `json:"id"`
+		Type         string `json:"type"`
+		Location     string `json:"location"`
+		LoadingSpeed int `json:"loading_speed"`
+		MaxCargo     int `json:"max_cargo"`
+		Cargo        []Cargo `json:"cargo"`
+		RoleData     RoleData `json:"role_data"`
+	}
+
+	var ships []ship
+	for _, s := range u.Ships {
+		ships = append(ships, ship{
+			Id:           s.Id,
+			Type:         s.Type,
+			Location:     s.Location,
+			LoadingSpeed: s.LoadingSpeed,
+			MaxCargo:     s.MaxCargo,
+			Cargo:        s.Cargo,
+			RoleData:     s.RoleData,
+		})
+	}
+
+	_, err := conn.Exec(ctx, `
+		INSERT INTO daemon_user_stats (user_id, credits, ship_count, ships)
+		VALUES ($1::uuid, $2, $3, $4)
+		`,
+		u.Id,
+		u.Credits,
+		len(ships),
+		ships,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SaveTransaction(ctx context.Context, conn DbConn, transaction DbTransaction) error {
+	_, err := conn.Exec(ctx, `
+		INSERT INTO daemon_user_transaction (
+             user_id
+            ,ship_id
+            ,type
+            ,good
+            ,price_per_unit
+            ,quantity
+            ,total
+            ,location
+        ) VALUES (
+             $1::uuid
+            ,$2
+            ,$3
+            ,$4
+            ,$5
+            ,$6
+            ,$7
+            ,$8
+        )
+		`,
+		transaction.UserId,
+		transaction.ShipId,
+		transaction.Type,
+		transaction.Good,
+		transaction.PricePerUnit,
+		transaction.Quantity,
+		transaction.Total,
+		transaction.Location,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to save transaction: %w", err)
 	}
 
 	return nil

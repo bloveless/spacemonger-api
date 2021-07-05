@@ -19,62 +19,21 @@ spec:
         component: spacemongerd
     spec:
       containers:
-      - name: spacemongerd-trader
+      - name: spacemongerd
         image: bloveless/spacemongerd
         command: ["/app/spacemongerd"]
         envFrom:
         - secretRef:
             name: spacemonger
         env:
-        - name: USERNAME_BASE
+        - name: USERNAME
           value: bloveless
-        - name: POSTGRES_HOST
-          value: 192.168.4.252
-        - name: POSTGRES_PORT
-          value: '5432'
-        - name: POSTGRES_USERNAME
-          value: spacemonger
-        - name: POSTGRES_DATABASE
-          value: spacemonger
         - name: ENABLE_TRADER
           value: "true"
         - name: ENABLE_SCOUTS
-          value: "false"
+          value: "true"
         - name: ENABLE_RESET
           value: "true"
-        - name: RUST_LOG
-          value: spacemongerd=debug,spacetraders=info
-      - name: spacemongerd-scouts
-        image: bloveless/spacemongerd
-        command: ["/app/spacemongerd"]
-        envFrom:
-          - secretRef:
-              name: spacemonger
-        env:
-          - name: USERNAME_BASE
-            value: bloveless
-          - name: POSTGRES_HOST
-            value: 192.168.4.252
-          - name: POSTGRES_PORT
-            value: '5432'
-          - name: POSTGRES_USERNAME
-            value: spacemonger
-          - name: POSTGRES_DATABASE
-            value: spacemonger
-          - name: ENABLE_TRADER
-            value: "false"
-          - name: ENABLE_SCOUTS
-            value: "true"
-          - name: ENABLE_RESET
-            value: "false"
-          - name: RUST_LOG
-            value: spacemongerd=debug,spacetraders=trace
-          - name: HTTP_PROXY
-            value: 127.0.0.1:9080
-      - name: tor
-        image: bloveless/tor
-        ports:
-          - containerPort: 9080
       restartPolicy: Always
 ---
 apiVersion: apps/v1

@@ -243,7 +243,7 @@ func (suite *DbTestSuite) TestGetRoutesFromLocation() {
 			suite.Fail("Error creating market data", err)
 		}
 
-		routes, err := spacemonger.GetRoutesFromLocation(ctx, tx, "location1", 3)
+		routes, err := spacemonger.GetRoutesFromLocation(ctx, tx, "location1")
 		if err != nil {
 			suite.Fail("Unable to get routes from location", err)
 		}

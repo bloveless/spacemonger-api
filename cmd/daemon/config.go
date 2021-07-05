@@ -4,8 +4,11 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Config stores the application configuration
+// Make sure that if you add another key here that you add it to .env.prod since viper will only
+// overwrite values from the env if something exists in .env.prod
 type Config struct {
-	Username string `mapstructure:"USERNAME"`
+	Username     string `mapstructure:"USERNAME"`
 	PostgresUrl  string `mapstructure:"POSTGRES_URL"`
 	EnableScouts bool   `mapstructure:"ENABLE_SCOUTS"`
 	EnableTrader bool   `mapstructure:"ENABLE_TRADER"`

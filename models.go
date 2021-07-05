@@ -70,3 +70,15 @@ type DbRoute struct {
 	CostVolumeDistance        float64
 	ProfitSpeedVolumeDistance float64
 }
+
+type DbTransaction struct {
+	UserId string
+	ShipId string
+	Type string
+	Good string
+	PricePerUnit int
+	Quantity int
+	Total int
+	Location string
+}
+
