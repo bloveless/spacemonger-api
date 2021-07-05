@@ -19,8 +19,8 @@ pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
             SELECT
                  u.id::text
                 ,u.username
-                ,u.assignment
-                ,u.system_symbol
+                ,u.new_ship_assignment
+                ,u.new_ship_system_symbol
                 ,u.location_symbol
                 ,us.credits
                 ,us.ship_count
@@ -35,9 +35,8 @@ pub async fn users(pg_pool: web::Data<PgPool>) -> impl Responder {
             User {
                 id: row.get("id"),
                 username: row.get("username"),
-                assignment: row.get("assignment"),
-                system_symbol: row.get("system_symbol"),
-                location_symbol: row.get("location_symbol"),
+                new_ship_assignment: row.get("new_ship_assignment"),
+                new_ship_system_symbol: row.get("new_ship_system_symbol"),
                 credits: row.get("credits"),
                 ship_count: row.get("ship_count"),
                 ships: row.get("ships"),
@@ -74,16 +73,21 @@ pub async fn user_stats(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
     }
 
     let user_stats = sqlx::query("
-        ;WITH time_group AS (
+        ;WITH earliest_date AS (
+            SELECT MIN(created_at) AS earliest_date
+            FROM daemon_user_stats dus
+            WHERE dus.user_id = $1::uuid
+            LIMIT 1
+        ), time_group AS (
             SELECT
                  row_number() over (order by series) as id
                 ,series as end_date
                 ,series - '15 minutes'::interval as start_date
             FROM generate_series(
-                date_trunc('hour', NOW() - '7 days'::interval) + '1 hour'::interval,
+                date_trunc('hour', (SELECT earliest_date FROM earliest_date LIMIT 1)),
                 date_trunc('hour', NOW()) + '1 hour',
                 '15 minutes'::interval
-                ) as series
+            ) as series
         )
         SELECT
              tg.id
@@ -91,7 +95,7 @@ pub async fn user_stats(user_id: web::Path<String>, pg_pool: web::Data<PgPool>) 
             ,COALESCE(MAX(dus.ship_count), 0) as ship_count
             ,MAX(tg.end_date) as created_at
         FROM time_group tg
-        INNER JOIN daemon_user_stats dus
+        LEFT JOIN daemon_user_stats dus
             ON dus.created_at >= tg.start_date
             AND dus.created_at < tg.end_date
             AND dus.user_id = $1::uuid

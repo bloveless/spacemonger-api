@@ -4,9 +4,9 @@ use serde::{Serialize, Deserialize};
 #[derive(Serialize, Deserialize)]
 pub struct MarketData {
     pub id: i32,
-    pub location_symbol: String,
-    pub system_symbol: String,
-    pub good_symbol: String,
+    pub location: String,
+    pub system: String,
+    pub good: String,
     pub price_per_unit: i32,
     pub volume_per_unit: i32,
     pub quantity_available: i32,
@@ -19,9 +19,8 @@ pub struct MarketData {
 pub struct User {
     pub id: String,
     pub username: String,
-    pub assignment: String,
-    pub system_symbol: Option<String>,
-    pub location_symbol: Option<String>,
+    pub new_ship_assignment: String,
+    pub new_ship_system: Option<String>,
     pub credits: i32,
     pub ship_count: i32,
     pub ships: Option<String>,
@@ -62,19 +61,19 @@ pub struct UserTransaction {
     pub user_id: String,
     pub ship_id: String,
     pub transaction_type: String,
-    pub good_symbol: String,
+    pub good: String,
     pub price_per_unit: i32,
     pub quantity: i32,
     pub total: i32,
-    pub location_symbol: String,
+    pub location: String,
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct SystemInfo {
-    pub system_symbol: String,
+    pub system: String,
     pub system_name: String,
-    pub location_symbol: String,
+    pub location: String,
     pub location_name: String,
     pub location_type: String,
     pub x: i32,
@@ -84,9 +83,9 @@ pub struct SystemInfo {
 
 #[derive(Serialize, Deserialize)]
 pub struct Route {
-    pub purchase_location_symbol: String,
-    pub sell_location_symbol: String,
-    pub good_symbol: String,
+    pub purchase_location: String,
+    pub sell_location: String,
+    pub good: String,
     pub purchase_x: i32,
     pub purchase_y: i32,
     pub sell_x: i32,

@@ -9,12 +9,3 @@ pub async fn get_db_pool(host: String, port: i32, username: String, password: St
 
     Ok(pg_pool)
 }
-
-pub async fn run_migrations(pg_pool: PgPool) -> Result<(), anyhow::Error> {
-    sqlx::migrate!("./migrations")
-        .run(&pg_pool)
-        .await
-        .expect("Failed to migrate database");
-
-    Ok(())
-}

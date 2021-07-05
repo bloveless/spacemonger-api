@@ -121,12 +121,12 @@ pub async fn get_additional_fuel_required_for_trip(pg_pool: PgPool, http_client:
     // Ok((fuel_required + ship_fuel_penalty).ceil() as i32)
 }
 
-pub async fn get_routes_for_ship(pg_pool: PgPool, location_symbol: &str, ship_speed: i32) -> anyhow::Result<Vec<DbRoute>> {
+pub async fn get_routes_for_ship(pg_pool: PgPool, location: &str, ship_speed: i32) -> anyhow::Result<Vec<DbRoute>> {
     // TODO: Getting the best route only from the location that the ship currently is in locks
     //       the ship into trade loops. It might be better to search the entire system for the
     //       best route and then find the best trade to that location before beginning a trade
     //       route. That way we move around the system a little more
-    match db::get_routes_from_location(pg_pool.clone(), location_symbol, ship_speed).await {
+    match db::get_routes_from_location(pg_pool.clone(), location, ship_speed).await {
         Ok(routes) => return Ok(routes),
         Err(e) => panic!("Unable to get routes for ship {:?}", e),
     };
