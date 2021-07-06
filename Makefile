@@ -1,6 +1,6 @@
 include .env
 
-daemon_tag = 0.2.0-alpha.12
+daemon_tag = 0.2.0-alpha.13
 tor_tag = 0.1.0-alpha.4
 api_tag = 0.1.0-alpha.20
 

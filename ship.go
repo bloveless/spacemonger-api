@@ -58,7 +58,7 @@ func (s *Ship) purchaseGood(ctx context.Context, conn DbConn, client spacetrader
 			return fmt.Errorf("unable to create purchase order while purchasing good: %w", err)
 		}
 
-		log.Printf("%s:%s -- Purchased good \"%s\" quantity \"%d\"\n", s.Username, s.Id, good, quantity)
+		log.Printf("%s:%s -- Purchased good \"%s\" quantity \"%d\"\n", s.Username, s.Id, good, purchaseQuantity)
 		s.Messages <- ShipMessage{
 			Type:       ShipMessageUpdateCredits,
 			ShipId:     s.Id,
