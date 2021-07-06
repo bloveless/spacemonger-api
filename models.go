@@ -57,28 +57,25 @@ type DbFlightPlan struct {
 }
 
 type DbRoute struct {
-	PurchaseLocation          string
-	PurchaseLocationType      string
-	SellLocation              string
-	Good                      string
-	Distance                  float64
-	PurchaseLocationQuantity  int
-	SellLocationQuantity      int
-	PurchasePricePerUnit      int
-	SellPricePerUnit          int
-	VolumePerUnit             int
-	CostVolumeDistance        float64
-	ProfitSpeedVolumeDistance float64
+	PurchaseLocation         string
+	PurchaseLocationType     string
+	SellLocation             string
+	Good                     string
+	Distance                 float64
+	PurchaseLocationQuantity int
+	SellLocationQuantity     int
+	PurchasePricePerUnit     int
+	SellPricePerUnit         int
+	VolumePerUnit            int
 }
 
 type DbTransaction struct {
-	UserId string
-	ShipId string
-	Type string
-	Good string
+	UserId       string
+	ShipId       string
+	Type         string
+	Good         string
 	PricePerUnit int
-	Quantity int
-	Total int
-	Location string
+	Quantity     int
+	Total        int
+	Location     string
 }
-

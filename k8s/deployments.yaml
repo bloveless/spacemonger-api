@@ -27,10 +27,10 @@ spec:
             name: spacemonger
         env:
         - name: USERNAME
-          value: bloveless
-        - name: ENABLE_TRADER
+          value: bloveless2
+        - name: ENABLE_TRADER_LOGS
           value: "true"
-        - name: ENABLE_SCOUTS
+        - name: ENABLE_SCOUT_LOGS
           value: "true"
         - name: ENABLE_RESET
           value: "true"

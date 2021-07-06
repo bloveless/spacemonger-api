@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -19,22 +20,128 @@ import (
 )
 
 type App struct {
-	config Config
+	config spacemonger.Config
 	dbPool *pgxpool.Pool
 }
 
 func NewApp() App {
-	config, err := LoadConfig()
+	config, err := spacemonger.LoadConfig()
 	if err != nil {
-		log.Fatalf("Unable to load app config: %s\n", err)
+		log.Fatalf("Unable to load app config: %s", err)
 	}
 
 	pool, err := pgxpool.Connect(context.Background(), config.PostgresUrl)
 	if err != nil {
-		log.Fatalf("Unable to connect to connect to database: %s\n", err)
+		log.Fatalf("Unable to connect to connect to database: %s", err)
 	}
 
 	return App{dbPool: pool, config: config}
+}
+
+func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User, systemLocations spacetraders.GetSystemLocationsResponse, shipMessages chan spacemonger.ShipMessage, ships chan spacemonger.Ship) error {
+	// TODO: THERE ARE A LOT OF THINGS WRONG WITH THIS FUNCTION... IT WAS DONE HASTILY AND JUST COPIED AND PASTED...
+	// FIXME!!!!
+	newShip, newCredits, err := spacemonger.PurchaseShip(ctx, *user, "OE", "JW-MK-I")
+	if err != nil {
+		return fmt.Errorf("unable to purchase ship type \"%s\" in \"%s\": %w", "JW-MK-I", "OE", err)
+	}
+
+	user.Credits = newCredits
+
+	log.Printf("%s -- User purchased new ship %+v\n", user.Username, newShip)
+
+	var newCargo []spacemonger.Cargo
+	for _, c := range newShip.Cargo {
+		newCargo = append(newCargo, spacemonger.Cargo(c))
+	}
+
+	// The users first ship will be a trader...
+	// TODO: The System "OE" shouldn't be hard coded here
+	roleData := spacemonger.RoleData{Role: "Trader", System: "OE"}
+	if len(user.Ships) > 0 {
+		// After that we will assign each new Scout to an unassigned location
+		roleData.Role = "Scout"
+		foundScoutLocation := false
+
+		for _, l := range systemLocations.Locations {
+			foundAssignedScout := false
+			for _, s := range user.Ships {
+				if s.RoleData.Role == "Scout" && s.RoleData.Location == l.Symbol {
+					log.Printf("%s -- Found scout %s assigned to location %s\n", user.Username, s.Id, l.Symbol)
+					foundAssignedScout = true
+					break
+				}
+			}
+
+			if !foundAssignedScout {
+				roleData.Location = l.Symbol
+				// TODO: The system shouldn't be hard coded here
+				roleData.System = "OE"
+				foundScoutLocation = true
+
+				log.Printf("%s -- Assigning new scout %s to location %s\n", user.Username, newShip.Id, l.Symbol)
+
+				break
+			}
+		}
+
+		if !foundScoutLocation {
+			// If we were unable to find a scout location assume that every location has a scout assigned and that this ship should be a trader
+			roleData.Role = "Trader"
+			roleData.System = "OE"
+			roleData.Location = ""
+
+			log.Printf("%s:%s -- Unable to find location to assign scout to. Assigning ship as a trader\n", user.Username, newShip.Id)
+		}
+	}
+
+	// TODO: It is possible that the container exits after buying a ship but before the ship is assigned a role and saved to the DB
+	//       The system should be able to correct that by determining that the ship doesn't have a role and performing the same procedure
+	//       as above in the InitializeUser method
+
+	s := spacemonger.Ship{
+		Username:       user.Username,
+		UserId:         user.Id,
+		Id:             newShip.Id,
+		Type:           newShip.Type,
+		Location:       newShip.Location,
+		LoadingSpeed:   newShip.LoadingSpeed,
+		Speed:          newShip.Speed,
+		MaxCargo:       newShip.MaxCargo,
+		Cargo:          newCargo,
+		SpaceAvailable: newShip.SpaceAvailable,
+		RoleData:       roleData,
+		Messages:       shipMessages,
+	}
+
+	err = spacemonger.SaveShip(ctx, app.dbPool, *user, spacemonger.DbShip{
+		UserId:       user.Id,
+		ShipId:       newShip.Id,
+		Type:         newShip.Type,
+		Class:        newShip.Class,
+		MaxCargo:     newShip.MaxCargo,
+		LoadingSpeed: newShip.LoadingSpeed,
+		Speed:        newShip.Speed,
+		Manufacturer: newShip.Manufacturer,
+		Plating:      newShip.Plating,
+		Weapons:      newShip.Weapons,
+		RoleData:     roleData,
+		Location:     newShip.Location,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to save ship: %w", err)
+	}
+
+	ships <- s
+
+	user.Ships = append(user.Ships, s)
+
+	err = spacemonger.SaveUserStats(ctx, app.dbPool, *user)
+	if err != nil {
+		return fmt.Errorf("unable to save user stats: %w", err)
+	}
+
+	return nil
 }
 
 func main() {
@@ -43,23 +150,23 @@ func main() {
 
 	m, err := migrate.New("file://migrations", app.config.PostgresUrl)
 	if err != nil {
-		log.Fatalf("Unable to create migrator: %s\n", err)
+		log.Fatalf("Unable to create migrator: %s", err)
 	}
 
 	err = m.Up()
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Fatalf("Unable to migrate database: %s\n", err)
+		log.Fatalf("Unable to migrate database: %s", err)
 	}
 
 	client, err := spacetraders.NewClient()
 	if err != nil {
-		log.Fatalf("Unable to create client: %s\n", err)
+		log.Fatalf("Unable to create client: %s", err)
 	}
 
 	ctx := context.Background()
 	myIp, err := client.GetMyIpAddress(ctx)
 	if err != nil {
-		log.Fatalf("Unable to get my ip address: %s\n", err)
+		log.Fatalf("Unable to get my ip address: %s", err)
 	}
 
 	log.Printf("MyIp: %+v\n", myIp)
@@ -77,7 +184,7 @@ func main() {
 		}
 	}
 	if err != nil {
-		log.Fatalf("Unable to get game status: %s\n", err)
+		log.Fatalf("Unable to get game status: %s", err)
 	}
 
 	log.Printf("Game Status: %+v\n", status)
@@ -94,19 +201,19 @@ func main() {
 	// TODO: We only know about OE right now
 	system, err := user.Client.GetSystem(ctx, "OE")
 	if err != nil {
-		log.Fatalf("Unable to get system \"%s\": %s\n", "OE", err)
+		log.Fatalf("Unable to get system \"%s\": %s", "OE", err)
 	}
 
 	log.Printf("System: %+v\n", system)
 
 	err = spacemonger.SaveSystem(ctx, app.dbPool, system)
 	if err != nil {
-		log.Fatalf("Unable to save system: %s\n", err)
+		log.Fatalf("Unable to save system: %s", err)
 	}
 
 	systemLocations, err := user.Client.GetSystemLocations(ctx, "OE")
 	if err != nil {
-		log.Fatalf("Unable to get system locations: %s\n", err)
+		log.Fatalf("Unable to get system locations: %s", err)
 	}
 
 	log.Printf("System Locations: %+v\n", systemLocations)
@@ -120,7 +227,7 @@ func main() {
 			X:            location.X,
 			Y:            location.Y,
 		}); err != nil {
-			log.Fatalf("Unable to save location: %s\n", err)
+			log.Fatalf("Unable to save location: %s", err)
 		}
 	}
 
@@ -138,7 +245,7 @@ func main() {
 			ship := ship
 			go func() {
 				log.Printf("%s:%s -- Starting process for ship\n", ship.Username, ship.Id)
-				ship.Run(ctx, app.dbPool, user.Client)
+				ship.Run(ctx, app.config, app.dbPool, user.Client)
 			}()
 		}
 	}()
@@ -154,122 +261,40 @@ func main() {
 				ships <- s
 			}
 
+			// Special boot up instructions are to buy as many ships as possible before we start running
+			// this is because we have to have ships docked in a location in order to buy them but when we
+			// are first purchasing a ship we can purchase it from anywhere... which means we will have ships
+			// at that location to buy a bunch of ships.
+			if len(user.Ships) == 0 {
+				for user.Credits > 50_000 && len(user.Ships) < 20 {
+					// TODO: It seems like the user credits aren't accurate here... probably due to the gross
+					//       purchaseAndAssignShip function here
+					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, shipMessages, ships)
+					if err != nil {
+						log.Printf("%s -- ERROR unable to initially purchase and assign ships: %s\n", user.Username, err)
+					}
+				}
+			}
+
 			for {
 				// Next the user needs to process any rules that need processing.
 				// I.E. If the user has > 50k credits then buy as many cheap ships for probes as possible
-				log.Printf("%s -- User Credits %d\n", user.Username, user.Credits)
-				log.Printf("%s -- User Ships Length %d\n", user.Username, len(user.Ships))
 				if user.Credits > 50_000 && len(user.Ships) < 20 {
-					newShip, newCredits, err := spacemonger.PurchaseShip(ctx, user, "OE", "JW-MK-I")
+					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, shipMessages, ships)
 					if err != nil {
-						log.Fatalf("Unable to purchase ship type \"%s\" in \"%s\": %s\n", "OE", "JW-MK-I", err)
-					}
-
-					user.Credits = newCredits
-
-					log.Printf("%s -- User purchased new ship %+v\n", user.Username, newShip)
-
-					var newCargo []spacemonger.Cargo
-					for _, c := range newShip.Cargo {
-						newCargo = append(newCargo, spacemonger.Cargo(c))
-					}
-
-					// The users first ship will be a trader...
-					// TODO: The System "OE" shouldn't be hard coded here
-					roleData := spacemonger.RoleData{Role: "Trader", System: "OE"}
-					if len(user.Ships) > 0 {
-						// After that we will assign each new Scout to an unassigned location
-						roleData.Role = "Scout"
-						foundScoutLocation := false
-
-						for _, l := range systemLocations.Locations {
-							foundAssignedScout := false
-							for _, s := range user.Ships {
-								if s.RoleData.Role == "Scout" && s.RoleData.Location == l.Symbol {
-									log.Printf("%s -- Found scout %s assigned to location %s\n", user.Username, s.Id, l.Symbol)
-									foundAssignedScout = true
-									break
-								}
-							}
-
-							if !foundAssignedScout {
-								roleData.Location = l.Symbol
-								// TODO: The system shouldn't be hard coded here
-								roleData.System = "OE"
-								foundScoutLocation = true
-
-								log.Printf("%s -- Assigning new scout %s to location %s\n", user.Username, newShip.Id, l.Symbol)
-
-								break
-							}
-						}
-
-						if !foundScoutLocation {
-							// If we were unable to find a scout location assume that every location has a scout assigned and that this ship should be a trader
-							roleData.Role = "Trader"
-							roleData.System = "OE"
-							roleData.Location = ""
-
-							log.Printf("%s:%s -- Unable to find location to assign scout to. Reverting scout to trader\n", user.Username, newShip.Id)
-						}
-					}
-
-					// TODO: It is possible that the container exits after buying a ship but before the ship is assigned a role and saved to the DB
-					//       The system should be able to correct that by determining that the ship doesn't have a role and performing the same procedure
-					//       as above in the InitializeUser method
-
-					s := spacemonger.Ship{
-						Username:       user.Username,
-						UserId:         user.Id,
-						Id:             newShip.Id,
-						Type:           newShip.Type,
-						Location:       newShip.Location,
-						LoadingSpeed:   newShip.LoadingSpeed,
-						Speed:          newShip.Speed,
-						MaxCargo:       newShip.MaxCargo,
-						Cargo:          newCargo,
-						SpaceAvailable: newShip.SpaceAvailable,
-						RoleData:       roleData,
-						Messages:       shipMessages,
-					}
-
-					err = spacemonger.SaveShip(ctx, app.dbPool, user, spacemonger.DbShip{
-						UserId:       user.Id,
-						ShipId:       newShip.Id,
-						Type:         newShip.Type,
-						Class:        newShip.Class,
-						MaxCargo:     newShip.MaxCargo,
-						LoadingSpeed: newShip.LoadingSpeed,
-						Speed:        newShip.Speed,
-						Manufacturer: newShip.Manufacturer,
-						Plating:      newShip.Plating,
-						Weapons:      newShip.Weapons,
-						RoleData:     roleData,
-						Location:     newShip.Location,
-					})
-					if err != nil {
-						log.Fatalf("Unable to save ship: %s\n", err)
-					}
-
-					ships <- s
-
-					user.Ships = append(user.Ships, s)
-
-					err = spacemonger.SaveUserStats(ctx, app.dbPool, user)
-					if err != nil {
-						log.Fatalf("Unable to save user stats: %s\n", err)
+						log.Printf("%s -- ERROR unable to initially purchase and assign ships: %s\n", user.Username, err)
 					}
 				}
 
 				// Wait for a message to come back from a ship and run the rules again
 				message := <-shipMessages
-				log.Printf("%s -- Received message from ship %+v", user.Username, message)
 				if message.Type == spacemonger.ShipMessageUpdateCredits {
+					log.Printf("%s -- Received update credits message from ship %+v", user.Username, message)
 					user.Credits = message.NewCredits
 
 					err = spacemonger.SaveUserStats(ctx, app.dbPool, user)
 					if err != nil {
-						panic(err)
+						log.Printf("%s - ERROR Unable to save user stats: %s", user.Username, err)
 					}
 				}
 			}

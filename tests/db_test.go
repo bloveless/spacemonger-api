@@ -250,18 +250,16 @@ func (suite *DbTestSuite) TestGetRoutesFromLocation() {
 
 		expectedRoutes := []spacemonger.DbRoute{
 			{
-				PurchaseLocation:          "location1",
-				PurchaseLocationType:      "PLANET",
-				SellLocation:              "location2",
-				Good:                      "METALS",
-				Distance:                  28.284271247461902,
-				PurchaseLocationQuantity:  1000,
-				SellLocationQuantity:      2000,
-				PurchasePricePerUnit:      10,
-				SellPricePerUnit:          13,
-				VolumePerUnit:             1,
-				CostVolumeDistance:        0.10606601717798213,
-				ProfitSpeedVolumeDistance: 0.31819805153394637,
+				PurchaseLocation:         "location1",
+				PurchaseLocationType:     "PLANET",
+				SellLocation:             "location2",
+				Good:                     "METALS",
+				Distance:                 28.284271247461902,
+				PurchaseLocationQuantity: 1000,
+				SellLocationQuantity:     2000,
+				PurchasePricePerUnit:     10,
+				SellPricePerUnit:         13,
+				VolumePerUnit:            1,
 			},
 		}
 

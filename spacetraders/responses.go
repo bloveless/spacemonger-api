@@ -135,7 +135,7 @@ type GetSystemLocationsResponse struct {
 }
 
 type System struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
 	Symbol string `json:"symbol"`
 }
 

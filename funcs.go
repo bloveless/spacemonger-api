@@ -307,10 +307,6 @@ func PurchaseShip(ctx context.Context, u User, system string, shipType string) (
 		}
 	}
 
-	// log.Printf("%s -- Docked ship locations are %v\n", u.Username, dockedShipLocations)
-	// log.Printf("%s -- User has %d ships\n", u.Username, len(u.Ships))
-	// log.Printf("%s -- Ships available for purchase %+v\n", u.Username, availableShips)
-
 	if len(u.Ships) > 0 && len(dockedShipLocations) == 0 {
 		log.Printf("%s -- No docked ships found. Unable to purchase new ship. Will retry later\n", u.Username)
 		return spacetraders.Ship{}, 0, nil
@@ -349,6 +345,10 @@ func PurchaseShip(ctx context.Context, u User, system string, shipType string) (
 	}
 
 	if !foundShip {
+		log.Printf("%s -- Docked ship locations are %v\n", u.Username, dockedShipLocations)
+		log.Printf("%s -- User has %d ships\n", u.Username, len(u.Ships))
+		log.Printf("%s -- Ships available for purchase %+v\n", u.Username, availableShips)
+
 		return spacetraders.Ship{}, 0, fmt.Errorf("%s -- unable to find a ship for the user to purchase", u.Username)
 	}
 
@@ -380,19 +380,33 @@ type Route struct {
 }
 
 func GetBestTradingRoute(ctx context.Context, conn DbConn, s Ship) (Route, error) {
+	log.Printf("Getting routes for ship from location \"%s\"\n", s.Location)
 	dbRoutes, err := GetRoutesFromLocation(ctx, conn, s.Location)
 	if err != nil {
-		return Route{}, fmt.Errorf("unable ot get routes from db: %w", err)
+		return Route{}, fmt.Errorf("unable to get routes from db: %w", err)
 	}
 
 	foundARoute := false
 	bestRoute := Route{}
 	for _, r := range dbRoutes {
-		route := Route(r)
-
 		profit := float64(r.SellPricePerUnit - r.PurchasePricePerUnit)
-		route.CostVolumeDistance = profit / float64(r.VolumePerUnit) / r.Distance
-		route.ProfitSpeedVolumeDistance = (profit * float64(s.Speed)) / (float64(r.VolumePerUnit) * r.Distance)
+		costVolumeDistance := profit / float64(r.VolumePerUnit) / r.Distance
+		profitSpeedVolumeDistance := (profit * float64(s.Speed)) / (float64(r.VolumePerUnit) * r.Distance)
+
+		route := Route{
+			PurchaseLocation:          r.PurchaseLocation,
+			PurchaseLocationType:      r.PurchaseLocationType,
+			SellLocation:              r.SellLocation,
+			Good:                      r.Good,
+			Distance:                  r.Distance,
+			PurchaseLocationQuantity:  r.PurchaseLocationQuantity,
+			SellLocationQuantity:      r.SellLocationQuantity,
+			PurchasePricePerUnit:      r.PurchasePricePerUnit,
+			SellPricePerUnit:          r.SellPricePerUnit,
+			VolumePerUnit:             r.VolumePerUnit,
+			CostVolumeDistance:        costVolumeDistance,
+			ProfitSpeedVolumeDistance: profitSpeedVolumeDistance,
+		}
 
 		if route.SellLocation == "OE-XV-91-2" {
 			continue

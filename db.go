@@ -3,6 +3,7 @@ package spacemonger
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"spacemonger/spacetraders"
@@ -416,7 +417,7 @@ func GetRoutesFromLocation(ctx context.Context, conn DbConn, location string) ([
 			ON from_dl.location = dml1.location
 		INNER JOIN daemon_location to_dl
 			ON to_dl.location = dml2.location
-		WHERE from_dl.location = $1
+		WHERE dml1.location = $1
 			AND from_dl.system = to_dl.system
 			AND dml1.good = dml2.good
 			AND dml1.location != dml2.location
@@ -542,13 +543,16 @@ func GetFuelRequired(ctx context.Context, conn DbConn, origin string, destinatio
 }
 
 func SaveUserStats(ctx context.Context, conn DbConn, u User) error {
+	log.Printf("%s -- User Credits %d\n", u.Username, u.Credits)
+	log.Printf("%s -- User Ships Length %d\n", u.Username, len(u.Ships))
+
 	type ship struct {
-		Id           string `json:"id"`
-		Type         string `json:"type"`
-		Location     string `json:"location"`
-		LoadingSpeed int `json:"loading_speed"`
-		MaxCargo     int `json:"max_cargo"`
-		Cargo        []Cargo `json:"cargo"`
+		Id           string   `json:"id"`
+		Type         string   `json:"type"`
+		Location     string   `json:"location"`
+		LoadingSpeed int      `json:"loading_speed"`
+		MaxCargo     int      `json:"max_cargo"`
+		Cargo        []Cargo  `json:"cargo"`
 		RoleData     RoleData `json:"role_data"`
 	}
 
