@@ -18,22 +18,123 @@ type DbConn interface {
 	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
 
-func GetUsers(ctx context.Context, conn DbConn) ([]User, error) {
-	var users []User
-	rows, err := conn.Query(ctx, `SELECT id::text, username, token, new_ship_role_data FROM daemon_user`)
+func GetUsersWithStats(ctx context.Context, conn DbConn) ([]DbUserWithStats, error) {
+	var users []DbUserWithStats
+	rows, err := conn.Query(ctx, `
+		;WITH user_stats AS (
+			SELECT
+				 user_id
+				,credits
+				,ship_count
+				,ships
+				,created_at
+				,ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rank
+			FROM daemon_user_stats
+		)
+		SELECT
+			 u.id::text
+			,u.username
+			,u.new_ship_role_data
+			,us.credits
+			,us.ship_count
+			,us.ships
+			,us.created_at as stats_updated_at
+		FROM daemon_user u
+		INNER JOIN user_stats us
+			ON u.id = us.user_id
+		WHERE us.rank = 1;
+		`,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get users from db: %w", err)
 	}
 
 	for rows.Next() {
-		u := User{}
+		u := DbUserWithStats{}
 
-		rows.Scan(&u.Id, &u.Username, &u.Token, &u.NewShipRoleData)
+		err := rows.Scan(&u.Id, &u.Username, &u.NewShipRoleData, &u.Credits, &u.ShipCount, &u.Ships, &u.StatsUpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read user stats row: %w", err)
+		}
 
 		users = append(users, u)
 	}
 
 	return users, nil
+}
+
+type UserStats struct {
+	Username string        `json:"username"`
+	Stats    []DbUserStats `json:"stats"`
+}
+
+func GetUserStats(ctx context.Context, conn DbConn, userId string) (UserStats, error) {
+	var username string
+	err := conn.QueryRow(ctx, `
+        SELECT
+            u.username
+        FROM daemon_user u
+        WHERE u.id = $1::uuid
+        LIMIT 1;
+		`,
+		userId,
+	).Scan(&username)
+	if err != nil {
+		return UserStats{}, fmt.Errorf("unable to get username: %w", err)
+	}
+
+	rows, err := conn.Query(ctx, `
+		;WITH earliest_date AS (
+            SELECT MIN(created_at) AS earliest_date
+            FROM daemon_user_stats dus
+            WHERE dus.user_id = $1::uuid
+            LIMIT 1
+        ), time_group AS (
+            SELECT
+                 row_number() over (order by series) as id
+                ,series as end_date
+                ,series - '15 minutes'::interval as start_date
+            FROM generate_series(
+                date_trunc('hour', (SELECT earliest_date FROM earliest_date LIMIT 1)),
+                date_trunc('hour', NOW()) + '1 hour',
+                '15 minutes'::interval
+            ) as series
+        )
+        SELECT
+             tg.id
+            ,COALESCE(MAX(dus.credits), 0) as credits
+            ,COALESCE(MAX(dus.ship_count), 0) as ship_count
+            ,MAX(tg.end_date) as created_at
+        FROM time_group tg
+        LEFT JOIN daemon_user_stats dus
+            ON dus.created_at >= tg.start_date
+            AND dus.created_at < tg.end_date
+            AND dus.user_id = $1::uuid
+        GROUP BY tg.id
+        ORDER BY tg.id;
+		`,
+		userId,
+	)
+	if err != nil {
+		return UserStats{}, fmt.Errorf("unable to get user stats: %w", err)
+	}
+
+	var stats []DbUserStats
+	for rows.Next() {
+		s := DbUserStats{}
+
+		err := rows.Scan(&s.Id, &s.Credits, &s.ShipCount, &s.CreatedAt)
+		if err != nil {
+			return UserStats{}, fmt.Errorf("unable to read user stat row: %w", err)
+		}
+
+		stats = append(stats, s)
+	}
+
+	return UserStats{
+		Username: username,
+		Stats:    stats,
+	}, nil
 }
 
 func GetUser(ctx context.Context, conn DbConn, username string) (User, error) {
@@ -125,6 +226,8 @@ func GetShips(ctx context.Context, conn DbConn, userId string) ([]DbShip, error)
 			,weapons
 			,role_data
 			,location
+			,modified_at
+			,created_at
 		FROM daemon_user_ship
 		WHERE user_id = $1;
 		`,
@@ -151,6 +254,8 @@ func GetShips(ctx context.Context, conn DbConn, userId string) ([]DbShip, error)
 			&s.Weapons,
 			&s.RoleData,
 			&s.Location,
+			&s.ModifiedAt,
+			&s.CreatedAt,
 		)
 		if err != nil {
 			return []DbShip{}, err
@@ -564,19 +669,9 @@ func SaveUserStats(ctx context.Context, conn DbConn, u User) error {
 	log.Printf("%s -- User Credits %d\n", u.Username, u.Credits)
 	log.Printf("%s -- User Ships Length %d\n", u.Username, len(u.Ships))
 
-	type ship struct {
-		Id           string   `json:"id"`
-		Type         string   `json:"type"`
-		Location     string   `json:"location"`
-		LoadingSpeed int      `json:"loading_speed"`
-		MaxCargo     int      `json:"max_cargo"`
-		Cargo        []Cargo  `json:"cargo"`
-		RoleData     RoleData `json:"role_data"`
-	}
-
-	var ships []ship
+	var ships []DbShipStats
 	for _, s := range u.Ships {
-		ships = append(ships, ship{
+		ships = append(ships, DbShipStats{
 			Id:           s.Id,
 			Type:         s.Type,
 			Location:     s.Location,
