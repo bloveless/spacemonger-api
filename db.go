@@ -18,6 +18,24 @@ type DbConn interface {
 	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
 
+func GetUsers(ctx context.Context, conn DbConn) ([]User, error) {
+	var users []User
+	rows, err := conn.Query(ctx, `SELECT id::text, username, token, new_ship_role_data FROM daemon_user`)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get users from db: %w", err)
+	}
+
+	for rows.Next() {
+		u := User{}
+
+		rows.Scan(&u.Id, &u.Username, &u.Token, &u.NewShipRoleData)
+
+		users = append(users, u)
+	}
+
+	return users, nil
+}
+
 func GetUser(ctx context.Context, conn DbConn, username string) (User, error) {
 	u := User{}
 	err := conn.QueryRow(ctx, `

@@ -110,9 +110,9 @@ func executeRequest(ctx context.Context, client Client, method string, url strin
 		}
 
 		if response.StatusCode == 500 {
-			// If there was an internal server error then try the request again in 2 seconds
-			log.Printf("Caught internal server error retrying in 2 seconds. %s", responseBody)
-			time.Sleep(2 * time.Second)
+			// If there was an internal server error then try the request again in 30 seconds
+			log.Printf("Caught internal server error retrying in 30 seconds. %s", responseBody)
+			time.Sleep(30 * time.Second)
 
 			continue
 		}
