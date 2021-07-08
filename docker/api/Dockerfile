@@ -1,34 +1,19 @@
-FROM rust:1.52.1-buster as planner-api
+FROM golang:1.16.5-buster as builder
 
-WORKDIR app
+WORKDIR /app
 
-RUN cargo install cargo-chef --version 0.1.20
+COPY go.mod .
+COPY go.sum .
 
-COPY . .
-
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM rust:1.52.1-buster as cacher-api
-
-WORKDIR app
-RUN cargo install cargo-chef --version 0.1.20
-COPY --from=planner-api /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-
-FROM rust:1.52.1-buster as builder-api
-
-WORKDIR /app/
+RUN go mod download
 
 COPY . .
 
-COPY --from=cacher-api /app/target target
-COPY --from=cacher-api /usr/local/cargo /usr/local/cargo
+RUN go build -o ./out/spacemonger-api ./cmd/api/*.go
 
-RUN cargo build --release --package spacemonger-api --bin spacemonger-api
+# ----------------------------------------------- #
 
-ENTRYPOINT ["/app/entrypoint.sh"]
-
-FROM debian:buster-slim
+FROM debian:buster
 
 RUN mkdir -p /app \
     && useradd -ms /bin/bash spacemonger \
@@ -39,9 +24,11 @@ RUN mkdir -p /app \
 
 WORKDIR /app
 
+COPY ./.env.prod ./.env
+
+COPY --from=builder /app/out/spacemonger-api /app/spacemonger-api
+RUN chown -R spacemonger:spacemonger /app/spacemonger-api
+
 USER spacemonger
 
-COPY --from=builder-api --chown=spacemonger:spacemonger /app/target/release/spacemonger-api /app/
-COPY --chown=spacemonger:spacemonger ./docker/api/entrypoint.sh /app/
-
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["/app/spacemonger-api"]

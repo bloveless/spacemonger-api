@@ -1,18 +1,12 @@
 include .env
 
-daemon_tag = 0.2.0-alpha.13
-tor_tag = 0.1.0-alpha.4
-api_tag = 0.1.0-alpha.20
+daemon_tag = 0.2.0-alpha.16
+api_tag = 0.2.0-alpha.1
 
 .PHONY: publish-daemon
 publish-daemon:
 	docker build --platform linux/arm64 -f docker/daemon/Dockerfile -t bloveless/spacemongerd:$(daemon_tag) .
 	docker push bloveless/spacemongerd:$(daemon_tag)
-
-.PHONY: publish-tor
-publish-tor:
-	docker build --platform linux/arm64 -f docker/tor/Dockerfile -t bloveless/tor:$(tor_tag) .
-	docker push bloveless/tor:$(tor_tag)
 
 .PHONY: publish-api
 publish-api:

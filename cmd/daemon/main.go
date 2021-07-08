@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -283,6 +284,42 @@ func main() {
 					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, shipMessages, ships)
 					if err != nil {
 						log.Printf("%s -- ERROR unable to initially purchase and assign ships: %s\n", user.Username, err)
+					}
+				}
+
+				if user.Credits > 1_000_000 && user.OutstandingLoans > 0 {
+					log.Printf("%s -- Attempting to pay off an unpaid loan\n", user.Username)
+					var unpaidLoanId string
+					for _, currentLoan := range user.Loans {
+						if !strings.Contains(currentLoan.Status, "PAID") {
+							unpaidLoanId = currentLoan.Id
+							break
+						}
+					}
+
+					if unpaidLoanId != "" {
+						payLoanResponse, err := user.Client.PayOffLoan(ctx, unpaidLoanId)
+						if err != nil {
+							log.Printf("%s -- ERROR unable to pay off loan \"%s\": %s\n", user.Username, unpaidLoanId, err)
+							continue
+						}
+
+						log.Printf("%s -- Paid off loan \"%s\"\n", user.Username, unpaidLoanId)
+
+						user.Credits = payLoanResponse.Credits
+
+						var newLoans []spacemonger.Loan
+						outstandingLoans := 0
+						for _, l := range payLoanResponse.Loans {
+							newLoans = append(newLoans, spacemonger.Loan(l))
+							if !strings.Contains(l.Status, "PAID") {
+								outstandingLoans += 1
+							}
+						}
+						user.Loans = newLoans
+						user.OutstandingLoans = outstandingLoans
+
+						log.Printf("%s -- Remaining loans to pay off \"%d\"\n", user.Username, user.OutstandingLoans)
 					}
 				}
 

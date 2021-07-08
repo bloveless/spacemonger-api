@@ -63,17 +63,6 @@ spec:
           envFrom:
             - secretRef:
                 name: spacemonger
-          env:
-            - name: USERNAME_BASE
-              value: bloveless
-            - name: POSTGRES_HOST
-              value: 192.168.4.252
-            - name: POSTGRES_PORT
-              value: '5432'
-            - name: POSTGRES_USERNAME
-              value: spacemonger
-            - name: POSTGRES_DATABASE
-              value: spacemonger
       restartPolicy: Always
 ---
 apiVersion: apps/v1

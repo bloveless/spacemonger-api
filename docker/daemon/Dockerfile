@@ -11,6 +11,8 @@ COPY . .
 
 RUN go build -o ./out/spacemongerd ./cmd/daemon/*.go
 
+# ----------------------------------------------- #
+
 FROM debian:buster
 
 RUN mkdir -p /app \

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 // It doesn't matter how many of these clients we have... the rate limit will apply to all of the so we need a global
 // mutex that we can lock all the clients at the same time
 var httpMutex sync.Mutex
+var scrapShipRegex = regexp.MustCompile(`Ship scrapped for (\d+) credits`)
 
 type Client struct {
 	httpClient http.Client
@@ -419,6 +421,24 @@ func (ac AuthorizedClient) JettisonCargo(ctx context.Context, shipId string, goo
 	}
 
 	return response, nil
+}
+
+// ScrapShip sells a ship and returns the credits that the ship was sold for
+func (ac AuthorizedClient) ScrapShip(ctx context.Context, shipId string) (int, error) {
+	response := ScrapShipResponse{}
+	err := executeRequest(ctx, ac.client, "DELETE", ac.client.baseURL+fmt.Sprintf("/my/ships/%s/", shipId), ac.token, nil, &response)
+	if err != nil {
+		return 0, fmt.Errorf("unable to scrap ship: %w", err)
+	}
+
+	captures := scrapShipRegex.FindStringSubmatch(response.Success)
+
+	scrapValue, err := strconv.Atoi(captures[1])
+	if err != nil {
+		return 0, fmt.Errorf("ship was scrapped but response \"%s\" was unable to be parsed: %w", response.Success, err)
+	}
+
+	return scrapValue, nil
 }
 
 // TODO: Scrap your ship for credits

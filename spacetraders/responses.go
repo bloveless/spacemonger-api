@@ -158,3 +158,7 @@ type GetAvailableLoansResponse struct {
 type WarpJumpResponse struct {
 	FlightPlan FlightPlan `json:"flightPlan"`
 }
+
+type ScrapShipResponse struct {
+	Success string `json:"success"`
+}

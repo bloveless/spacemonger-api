@@ -153,6 +153,26 @@ func (s Ship) Run(ctx context.Context, config Config, conn DbConn, client spacet
 
 	for {
 		if s.RoleData.Role == "Trader" {
+			if s.Location == "" {
+				log.Printf("%s:%s -- SOME STRANGE the ship has forgotten it's location", s.Username, s.Id)
+
+				newShip, err := client.GetMyShip(ctx, s.Id)
+				if err != nil {
+					log.Printf("%s:%s -- ERROR unable to reload ship while trying to refetch it's location: %s\n", s.Username, s.Id, err)
+					time.Sleep(60 * time.Second)
+					continue
+				}
+
+				log.Printf("%s:%s -- Updating ships location to \"%s\"\n", s.Username, s.Id, newShip.Ship.Location)
+				s.Location = newShip.Ship.Location
+				err = UpdateShipLocation(ctx, conn, s, s.Location)
+				if err != nil {
+					log.Printf("%s:%s -- ERROR unable to update ships location in db: %s\n", s.Username, s.Id, err)
+					time.Sleep(60 * time.Second)
+					continue
+				}
+			}
+
 			if err := s.emptyCargo(ctx, conn, client); err != nil {
 				log.Printf("%s:%s -- ERROR unable to empty cargo: %s\n", s.Username, s.Id, err)
 				time.Sleep(60 * time.Second)
