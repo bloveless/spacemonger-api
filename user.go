@@ -14,23 +14,33 @@ import (
 )
 
 type User struct {
-	Id               string
-	Token            string
-	Username         string
-	Ships            []Ship
-	Loans            []Loan
-	OutstandingLoans int
-	Credits          int
-	NewShipRoleData  RoleData
+	Id               string `json:"id"`
+	Token            string `json:"-"`
+	Username         string `json:"username"`
+	Ships            []Ship `json:"-"`
+	Loans            []Loan `json:"-"`
+	OutstandingLoans int `json:"-"`
+	Credits          int `json:"-"`
+	NewShipRoleData  RoleData `json:"-"`
 	// TODO: Is this wrong?
-	Client spacetraders.AuthorizedClient
+	Client spacetraders.AuthorizedClient `json:"-"`
+}
+
+type UserInitializer struct {
+	UserRepository        UserRepository
+	ShipRepository        ShipRepository
+	// TODO: All these repos are necessary just to create a ship... this feels wrong
+	FlightPlanRepository  FlightPlanRepository
+	RouteRepository       RouteRepository
+	MarketplaceRepository MarketplaceRepository
+	TransactionRepository TransactionRepository
 }
 
 // InitializeUser will get or create the user in the db and get the user ready to play. This means that if the user has
 // no money attempt to take out a loan. Maybe if the user doesn't have any ships then we should purchase a ship.
-func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpool.Pool, username string, newShipRoleData RoleData) (User, error) {
+func (ui UserInitializer) InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpool.Pool, username string, newShipRoleData RoleData) (User, error) {
 	// Get user from DB
-	user, err := GetUser(ctx, pool, username)
+	user, err := ui.UserRepository.GetUserByUsername(ctx, username)
 	if errors.Is(err, pgx.ErrNoRows) {
 		log.Printf("Creating new user: %s\n", username)
 
@@ -41,7 +51,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 
 		log.Printf("ClaimedUsername: %+v\n", claimedUsername)
 
-		user, err = SaveUser(ctx, pool, User{
+		user, err = ui.UserRepository.SaveUser(ctx, User{
 			Username:        username,
 			Token:           claimedUsername.Token,
 			NewShipRoleData: newShipRoleData,
@@ -101,7 +111,7 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 
 	log.Printf("%s -- User Api Ships %+v\n", user.Username, apiShips)
 
-	dbShips, err := GetShips(ctx, pool, user.Id)
+	dbShips, err := ui.ShipRepository.GetUserShips(ctx, user.Id)
 	if err != nil {
 		return User{}, err
 	}
@@ -142,23 +152,28 @@ func InitializeUser(ctx context.Context, client spacetraders.Client, pool *pgxpo
 
 			log.Printf("%s:%s -- Ship did not exist and was created with role data %+v\n", user.Username, dbShip.ShipId, roleData)
 
-			err = SaveShip(ctx, pool, user, dbShip)
+			err = ui.ShipRepository.SaveShip(ctx, user, dbShip)
 			if err != nil {
 				return User{}, err
 			}
 		}
 
 		s := Ship{
-			Username:       user.Username,
-			UserId:         user.Id,
-			Id:             apiShip.Id,
-			Type:           apiShip.Type,
-			Location:       apiShip.Location,
-			LoadingSpeed:   apiShip.LoadingSpeed,
-			Speed:          apiShip.Speed,
-			MaxCargo:       apiShip.MaxCargo,
-			SpaceAvailable: apiShip.SpaceAvailable,
-			RoleData:       roleData,
+			Username:              user.Username,
+			UserId:                user.Id,
+			Id:                    apiShip.Id,
+			Type:                  apiShip.Type,
+			Location:              apiShip.Location,
+			LoadingSpeed:          apiShip.LoadingSpeed,
+			Speed:                 apiShip.Speed,
+			MaxCargo:              apiShip.MaxCargo,
+			SpaceAvailable:        apiShip.SpaceAvailable,
+			RoleData:              roleData,
+			shipRepository:        ui.ShipRepository,
+			flightPlanRepository:  ui.FlightPlanRepository,
+			routeRepository:       ui.RouteRepository,
+			marketplaceRepository: ui.MarketplaceRepository,
+			transactionRepository: ui.TransactionRepository,
 		}
 
 		for _, cargo := range apiShip.Cargo {

@@ -13,6 +13,7 @@ import (
 
 func main() {
 	s := NewServer()
+	defer s.dbPool.Close()
 
 	r := chi.NewRouter()
 
@@ -49,8 +50,10 @@ func main() {
 		r.Route("/users", func(r chi.Router) {
 			// Users with latest stats
 			r.Get("/", s.GetUsers)
-			// User with all stats
-			r.Get("/{userId}", s.GetUsersWithStats)
+			// User info with all stats
+			r.Get("/{userId}", s.GetUser)
+			// User info with all stats
+			r.Get("/{userId}/stats", s.GetUserStats)
 			// Users ships
 			r.Get("/{userId}/ships", s.GetUserShips)
 			// Users ship transactions

@@ -5,11 +5,11 @@ commonLabels:
 
 images:
   - name: bloveless/spacemongerd
-    newTag: 0.2.0-alpha.16
+    newTag: 0.2.0-alpha.17
   - name: bloveless/spacemonger-api
-    newTag: 0.2.0-alpha.1
+    newTag: 0.2.0-alpha.2
   - name: bloveless/spacemonger-ui
-    newTag: 0.1.0-alpha.12
+    newTag: 0.1.0-alpha.13
 
 resources:
 - namespace.yaml

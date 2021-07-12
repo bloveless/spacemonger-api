@@ -14,7 +14,7 @@ type DbShipStats struct {
 	RoleData     RoleData `json:"role_data"`
 }
 
-type DbUserWithStats struct {
+type DbUserLatestStats struct {
 	Id              string        `json:"id"`
 	Username        string        `json:"username"`
 	NewShipRoleData RoleData      `json:"new_ship_role_data"`

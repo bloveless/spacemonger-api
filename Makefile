@@ -1,7 +1,7 @@
 include .env
 
-daemon_tag = 0.2.0-alpha.16
-api_tag = 0.2.0-alpha.1
+daemon_tag = 0.2.0-alpha.17
+api_tag = 0.2.0-alpha.2
 
 .PHONY: publish-daemon
 publish-daemon:

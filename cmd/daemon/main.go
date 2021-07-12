@@ -21,8 +21,16 @@ import (
 )
 
 type App struct {
-	config spacemonger.Config
-	dbPool *pgxpool.Pool
+	config                spacemonger.Config
+	dbPool                *pgxpool.Pool
+	userRepository        spacemonger.UserRepository
+	shipRepository        spacemonger.ShipRepository
+	systemRepository      spacemonger.SystemRepository
+	locationRepository    spacemonger.LocationRepository
+	flightPlanRepository  spacemonger.FlightPlanRepository
+	marketplaceRepository spacemonger.MarketplaceRepository
+	routeRepository       spacemonger.RouteRepository
+	transactionRepository spacemonger.TransactionRepository
 }
 
 func NewApp() App {
@@ -36,7 +44,18 @@ func NewApp() App {
 		log.Fatalf("Unable to connect to connect to database: %s", err)
 	}
 
-	return App{dbPool: pool, config: config}
+	return App{
+		config:                config,
+		dbPool:                pool,
+		userRepository:        spacemonger.PostgresUserRepository{Conn: pool},
+		shipRepository:        spacemonger.PostgresShipRepository{Conn: pool},
+		systemRepository:      spacemonger.PostgresSystemRepository{Conn: pool},
+		locationRepository:    spacemonger.PostgresLocationRepository{Conn: pool},
+		flightPlanRepository:  spacemonger.PostgresFlightPlanRepository{Conn: pool},
+		marketplaceRepository: spacemonger.PostgresMarketplaceRepository{Conn: pool},
+		routeRepository:       spacemonger.PostgresRouteRepository{Conn: pool},
+		transactionRepository: spacemonger.PostgresTransactionRepository{Conn: pool},
+	}
 }
 
 func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User, systemLocations spacetraders.GetSystemLocationsResponse, shipMessages chan spacemonger.ShipMessage, ships chan spacemonger.Ship) error {
@@ -115,7 +134,7 @@ func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User,
 		Messages:       shipMessages,
 	}
 
-	err = spacemonger.SaveShip(ctx, app.dbPool, *user, spacemonger.DbShip{
+	err = app.shipRepository.SaveShip(ctx, *user, spacemonger.DbShip{
 		UserId:       user.Id,
 		ShipId:       newShip.Id,
 		Type:         newShip.Type,
@@ -137,7 +156,7 @@ func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User,
 
 	user.Ships = append(user.Ships, s)
 
-	err = spacemonger.SaveUserStats(ctx, app.dbPool, *user)
+	err = app.userRepository.SaveUserStats(ctx, *user)
 	if err != nil {
 		return fmt.Errorf("unable to save user stats: %w", err)
 	}
@@ -191,7 +210,16 @@ func main() {
 	log.Printf("Game Status: %+v\n", status)
 	log.Printf("App Config %+v\n", app.config)
 
-	user, err := spacemonger.InitializeUser(ctx, client, app.dbPool, app.config.Username, spacemonger.RoleData{Role: "Trader", System: "OE"})
+	ui := spacemonger.UserInitializer{
+		UserRepository:        app.userRepository,
+		ShipRepository:        app.shipRepository,
+		FlightPlanRepository:  app.flightPlanRepository,
+		RouteRepository:       app.routeRepository,
+		MarketplaceRepository: app.marketplaceRepository,
+		TransactionRepository: app.transactionRepository,
+	}
+
+	user, err := ui.InitializeUser(ctx, client, app.dbPool, app.config.Username, spacemonger.RoleData{Role: "Trader", System: "OE"})
 	if err != nil {
 		log.Fatalf("Unable to initialize user: %s", err)
 	}
@@ -207,7 +235,7 @@ func main() {
 
 	log.Printf("System: %+v\n", system)
 
-	err = spacemonger.SaveSystem(ctx, app.dbPool, system)
+	err = app.systemRepository.SaveSystem(ctx, system)
 	if err != nil {
 		log.Fatalf("Unable to save system: %s", err)
 	}
@@ -220,7 +248,7 @@ func main() {
 	log.Printf("System Locations: %+v\n", systemLocations)
 
 	for _, location := range systemLocations.Locations {
-		if err = spacemonger.SaveLocation(ctx, app.dbPool, spacemonger.DbLocation{
+		if err = app.locationRepository.SaveLocation(ctx, spacemonger.DbLocation{
 			System:       "OE",
 			Location:     location.Symbol,
 			LocationName: location.Name,
@@ -329,7 +357,7 @@ func main() {
 					log.Printf("%s -- Received update credits message from ship %+v", user.Username, message)
 					user.Credits = message.NewCredits
 
-					err = spacemonger.SaveUserStats(ctx, app.dbPool, user)
+					err = app.userRepository.SaveUserStats(ctx, user)
 					if err != nil {
 						log.Printf("%s - ERROR Unable to save user stats: %s", user.Username, err)
 					}
