@@ -89,7 +89,8 @@ func (suite *DbTestSuite) TestGetUser() {
 			suite.FailNow("Failed inserting user", err)
 		}
 
-		user, err := spacemonger.GetUser(ctx, tx, "test-username")
+		ur := spacemonger.PostgresUserRepository{Conn: tx}
+		user, err := ur.GetUser(ctx, "test-username")
 		if err != nil {
 			suite.FailNow("Failed getting user", err)
 		}
@@ -122,12 +123,14 @@ func (suite *DbTestSuite) TestSaveMarketplaceData() {
 			}},
 		}
 
-		err := spacemonger.SaveLocationMarketplaceResponses(ctx, tx, "location1", m)
+		lr := spacemonger.PostgresMarketplaceRepository{Conn: tx}
+
+		err := lr.SaveLocationMarketplaceResponses(ctx, "location1", m)
 		if err != nil {
 			suite.Fail("Unable to save marketplace data", err)
 		}
 
-		err = spacemonger.SaveLocationMarketplaceResponses(ctx, tx, "location1", m2)
+		err = lr.SaveLocationMarketplaceResponses(ctx, "location1", m2)
 		if err != nil {
 			suite.Fail("Unable to save second marketplace data")
 		}
@@ -243,7 +246,8 @@ func (suite *DbTestSuite) TestGetRoutesFromLocation() {
 			suite.Fail("Error creating market data", err)
 		}
 
-		routes, err := spacemonger.GetRoutesFromLocation(ctx, tx, "location1")
+		rr := spacemonger.PostgresRouteRepository{Conn: tx}
+		routes, err := rr.GetRoutes(ctx, "location1")
 		if err != nil {
 			suite.Fail("Unable to get routes from location", err)
 		}
@@ -294,7 +298,8 @@ func (suite *DbTestSuite) TestGetShips() {
 			suite.Fail("Error creating ship data", err)
 		}
 
-		ships, err := spacemonger.GetShips(ctx, tx, userId)
+		sr := spacemonger.PostgresShipRepository{Conn: tx}
+		ships, err := sr.GetUserShips(ctx, userId)
 		if err != nil {
 			suite.Fail("Error getting ships", err)
 		}
