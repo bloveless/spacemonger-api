@@ -241,6 +241,11 @@ func main() {
 	exit := make(chan struct{}, 1)
 	ships := make(chan spacemonger.Ship, 3)
 
+	// TODO: Create a fuel balancer after we've got 2 million credits buy a Tiddalik and search the system for locations
+	//       that are low in fuel. Continually move fuel from the locations with the max quantity of fuel to the locations
+	//       that have the least quantity of fuel. Also this should be monitored so we don't accidentally waste all our
+	//       credits trying to do good for the system.
+
 	go func() {
 		for ship := range ships {
 			ship := ship

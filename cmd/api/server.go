@@ -32,7 +32,11 @@ func NewServer() Server {
 }
 
 func (s *Server) Index(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello world!"))
+	_, err := w.Write([]byte("Hello world!"))
+	if err != nil {
+		log.Printf("unable to write to response writer: %s\n", err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) GetUsers(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +46,11 @@ func (s *Server) GetUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 	}
 
-	json.NewEncoder(w).Encode(users)
+	err = json.NewEncoder(w).Encode(users)
+	if err != nil {
+		log.Printf("unable to encode users: %s\n", err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) GetUsersWithStats(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +61,11 @@ func (s *Server) GetUsersWithStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 	}
 
-	json.NewEncoder(w).Encode(userStats)
+	err = json.NewEncoder(w).Encode(userStats)
+	if err != nil {
+		log.Printf("unable to encode user stats: %s\n", err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) GetUserShips(w http.ResponseWriter, r *http.Request) {
@@ -64,5 +76,9 @@ func (s *Server) GetUserShips(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 	}
 
-	json.NewEncoder(w).Encode(userShips)
+	err = json.NewEncoder(w).Encode(userShips)
+	if err != nil {
+		log.Printf("unable to encode user ships: %s\n", err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	}
 }
