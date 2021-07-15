@@ -537,6 +537,33 @@ func (s *Ship) Run(ctx context.Context, config Config, client spacetraders.Autho
 				continue
 			}
 
+			locationWithMostFuelQuantity, err := s.MarketplaceRepository.GetLocationGoodQuantity(ctx, locationWithMostFuel, GoodFuel)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to get current quantity of \"%s\" at location \"%s\": %s\n", s.Username, s.Id, GoodFuel, locationWithMostFuel, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			locationWithLeastFuel, err := s.MarketplaceRepository.GetLocationWithLeastFuelInSystem(ctx, s.RoleData.System)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to get location with least fuel in system \"%s\": %s\n", s.Username, s.Id, s.RoleData.System, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			locationWithLeastFuelQuantity, err := s.MarketplaceRepository.GetLocationGoodQuantity(ctx, locationWithLeastFuel, GoodFuel)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to get current quantity of \"%s\" at location \"%s\": %s\n", s.Username, s.Id, GoodFuel, locationWithLeastFuel, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			if locationWithMostFuelQuantity - locationWithLeastFuelQuantity < 3000 {
+				log.Printf("%s:%s -- Location with most fuel quantity %d is less than 3000 greater than location with least fuel %d. Will check again in six minutes", s.Username, s.Id, locationWithMostFuelQuantity, locationWithLeastFuelQuantity)
+				time.Sleep(6 * time.Minute)
+				continue
+			}
+
 			if s.Location != locationWithMostFuel {
 				// Get fuel required to travel to the location with the most fuel
 				fuelRequiredForTravel, err := s.getAdditionalFuelRequiredForTrip(ctx, client, locationWithMostFuel)
@@ -562,16 +589,9 @@ func (s *Ship) Run(ctx context.Context, config Config, client spacetraders.Autho
 			}
 
 			// Purchase max fuel from current location
-			locationFuel, err := s.MarketplaceRepository.GetLocationGoodQuantity(ctx, s.Location, GoodFuel)
-			if err != nil {
-				log.Printf("%s:%s -- Unable to get current quantity of \"%s\" at location \"%s\": %s\n", s.Username, s.Id, GoodFuel, s.Location, err)
-				time.Sleep(60 * time.Second)
-				continue
-			}
-
 			fuelToPurchase := s.SpaceAvailable
-			if locationFuel < s.SpaceAvailable {
-				fuelToPurchase = locationFuel
+			if locationWithMostFuelQuantity < s.SpaceAvailable {
+				fuelToPurchase = locationWithMostFuelQuantity
 			}
 
 			err = s.purchaseGood(ctx, client, GoodFuel, fuelToPurchase)
@@ -582,13 +602,6 @@ func (s *Ship) Run(ctx context.Context, config Config, client spacetraders.Autho
 			}
 
 			// Move to the location with the least amount of fuel
-			locationWithLeastFuel, err := s.MarketplaceRepository.GetLocationWithLeastFuelInSystem(ctx, s.RoleData.System)
-			if err != nil {
-				log.Printf("%s:%s -- Unable to get location with least fuel in system \"%s\": %s\n", s.Username, s.Id, s.RoleData.System, err)
-				time.Sleep(60 * time.Second)
-				continue
-			}
-
 			err = s.moveToLocation(ctx, client, locationWithLeastFuel)
 			if err != nil {
 				log.Printf("%s:%s -- Unable to move to location with least fuel: %s\n", s.Username, s.Id, err)
