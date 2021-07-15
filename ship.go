@@ -33,11 +33,11 @@ type Ship struct {
 	Cargo                 []Cargo
 	RoleData              RoleData
 	Messages              chan ShipMessage
-	shipRepository        ShipRepository
-	flightPlanRepository  FlightPlanRepository
-	routeRepository       RouteRepository
-	marketplaceRepository MarketplaceRepository
-	transactionRepository TransactionRepository
+	ShipRepository        ShipRepository
+	FlightPlanRepository  FlightPlanRepository
+	RouteRepository       RouteRepository
+	MarketplaceRepository MarketplaceRepository
+	TransactionRepository TransactionRepository
 }
 
 type Route struct {
@@ -80,7 +80,7 @@ func (s *Ship) purchaseGood(ctx context.Context, client spacetraders.AuthorizedC
 			return fmt.Errorf("unable to create purchase order while purchasing good: %w", err)
 		}
 
-		log.Printf("%s:%s -- Purchased good \"%s\" quantity \"%d\"\n", s.Username, s.Id, good, purchaseQuantity)
+		log.Printf("%s:%s -- Purchased good \"%s\" quantity \"%d\" from \"%s\"\n", s.Username, s.Id, good, purchaseQuantity, s.Location)
 		s.Messages <- ShipMessage{
 			Type:       ShipMessageUpdateCredits,
 			ShipId:     s.Id,
@@ -108,7 +108,7 @@ func (s *Ship) createPurchaseOrder(ctx context.Context, client spacetraders.Auth
 		s.Cargo = newCargo
 		s.SpaceAvailable = resp.Ship.SpaceAvailable
 
-		err = s.transactionRepository.SaveTransaction(ctx, DbTransaction{
+		err = s.TransactionRepository.SaveTransaction(ctx, DbTransaction{
 			UserId:       s.UserId,
 			ShipId:       s.Id,
 			Type:         "purchase",
@@ -142,7 +142,7 @@ func (s *Ship) sellGood(ctx context.Context, client spacetraders.AuthorizedClien
 			return fmt.Errorf("unable to create purchase order while selling good: %w", err)
 		}
 
-		log.Printf("%s:%s -- Sold good \"%s\" quantity \"%d\"\n", s.Username, s.Id, good, quantity)
+		log.Printf("%s:%s -- Sold good \"%s\" quantity \"%d\" to \"%s\"\n", s.Username, s.Id, good, sellQuantity, s.Location)
 		s.Messages <- ShipMessage{
 			Type:       ShipMessageUpdateCredits,
 			ShipId:     s.Id,
@@ -170,7 +170,7 @@ func (s *Ship) createSellOrder(ctx context.Context, client spacetraders.Authoriz
 		s.Cargo = newCargo
 		s.SpaceAvailable = resp.Ship.SpaceAvailable
 
-		err = s.transactionRepository.SaveTransaction(ctx, DbTransaction{
+		err = s.TransactionRepository.SaveTransaction(ctx, DbTransaction{
 			UserId:       s.UserId,
 			ShipId:       s.Id,
 			Type:         "sell",
@@ -217,7 +217,7 @@ func (s *Ship) getAdditionalFuelRequiredForTrip(ctx context.Context, client spac
 
 	log.Printf("%s:%s -- Ship currently has %d fuel\n", s.Username, s.Id, currentFuel)
 
-	dbFuelRequired, err := s.flightPlanRepository.GetFuelRequired(ctx, s.Location, destination, s.Type)
+	dbFuelRequired, err := s.FlightPlanRepository.GetFuelRequired(ctx, s.Location, destination, s.Type)
 	if err == nil {
 		log.Printf("%s:%s -- Using fuel required from the db %d\n", s.Username, s.Id, dbFuelRequired)
 		if dbFuelRequired > currentFuel {
@@ -233,15 +233,9 @@ func (s *Ship) getAdditionalFuelRequiredForTrip(ctx context.Context, client spac
 	log.Printf("%s:%s -- Selling %d fuel in order to get fuel required from Api\n", s.Username, s.Id, currentFuel)
 
 	if currentFuel > 0 {
-		sellOrder, err := client.CreateSellOrder(ctx, s.Id, GoodFuel, currentFuel)
+		err := s.sellGood(ctx, client, GoodFuel, currentFuel)
 		if err != nil {
 			return 0, err
-		}
-
-		s.Messages <- ShipMessage{
-			Type:       ShipMessageUpdateCredits,
-			ShipId:     s.Id,
-			NewCredits: sellOrder.Credits,
 		}
 	}
 
@@ -283,7 +277,7 @@ func (s *Ship) createFlightPlan(ctx context.Context, client spacetraders.Authori
 
 	s.Cargo = newCargo
 
-	err = s.flightPlanRepository.SaveFlightPlan(ctx, s.UserId, DbFlightPlan{
+	err = s.FlightPlanRepository.SaveFlightPlan(ctx, s.UserId, DbFlightPlan{
 		Id:                     flightPlanResp.FlightPlan.Id,
 		UserId:                 s.UserId,
 		ShipId:                 s.Id,
@@ -321,11 +315,11 @@ func (s *Ship) moveToLocation(ctx context.Context, client spacetraders.Authorize
 		return fmt.Errorf("unable to create flight plan: %w", err)
 	}
 
-	log.Printf("%s:%s -- Flight plan created. Waiting for %d seconds for ship to arrive\n", s.Username, s.Id, flightPlan.TimeRemainingInSeconds)
+	log.Printf("%s:%s -- Flight plan created. Waiting for %d seconds for ship to arrive at \"%s\"\n", s.Username, s.Id, flightPlan.TimeRemainingInSeconds, destination)
 	time.Sleep(time.Duration(flightPlan.TimeRemainingInSeconds) * time.Second)
 
 	s.Location = destination
-	err = s.shipRepository.UpdateShipLocation(ctx, *s, s.Location)
+	err = s.ShipRepository.UpdateShipLocation(ctx, *s, s.Location)
 	if err != nil {
 		return fmt.Errorf("unable to update ships location in db: %w", err)
 	}
@@ -335,7 +329,7 @@ func (s *Ship) moveToLocation(ctx context.Context, client spacetraders.Authorize
 
 func (s *Ship) getBestTradingRoute(ctx context.Context) (Route, error) {
 	log.Printf("Getting routes for ship from location \"%s\"\n", s.Location)
-	dbRoutes, err := s.routeRepository.GetRoutes(ctx, s.Location)
+	dbRoutes, err := s.RouteRepository.GetRoutes(ctx, s.Location)
 	if err != nil {
 		return Route{}, fmt.Errorf("unable to get routes from db: %w", err)
 	}
@@ -388,11 +382,22 @@ func (s *Ship) getBestTradingRoute(ctx context.Context) (Route, error) {
 	return bestRoute, nil
 }
 
-func (s Ship) Run(ctx context.Context, config Config, conn DbConn, client spacetraders.AuthorizedClient) {
+func (s *Ship) Run(ctx context.Context, config Config, client spacetraders.AuthorizedClient) {
 	// Pre-flight checks.
 	// 1. Make sure that the ship isn't currently in motion. If it is we need to wait for it to arrive.
 	// 2. Make sure that the ship starts with empty cargo
-	flightPlan, err := s.flightPlanRepository.GetActiveFlightPlan(ctx, s.Id)
+	// TODO: When purchashing a Tiddalik this line threw a null pointer exception... should probably figure out what happened
+	// panic: runtime error: invalid memory address or nil pointer dereference
+	// [signal SIGSEGV: segmentation violation code=0x1 addr=0x18 pc=0x3d9354]
+	//
+	// goroutine 150 [running]:
+	// spacemonger.Ship.Run(0x40004dd6d0, 0xa, 0x40005c4570, 0x24, 0x40000b4f00, 0x1c, 0x40003fcdb0, 0x7, 0x40003fcd98, 0x8, ...)
+	//	/app/ship.go:395 +0x44
+	// main.main.func1.1(0x4000406360, 0x58ed10, 0x400011c000, 0x40001622c0, 0x40001fe1e0)
+	//	/app/cmd/daemon/main.go:287 +0x198
+	// created by main.main.func1
+	//	/app/cmd/daemon/main.go:285 +0x80
+	flightPlan, err := s.FlightPlanRepository.GetActiveFlightPlan(ctx, s.Id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		log.Printf("%s:%s -- ERROR looking up flight plan: %v", s.Username, s.Id, err)
 	}
@@ -422,7 +427,7 @@ func (s Ship) Run(ctx context.Context, config Config, conn DbConn, client spacet
 
 				log.Printf("%s:%s -- Updating ships location to \"%s\"\n", s.Username, s.Id, newShip.Ship.Location)
 				s.Location = newShip.Ship.Location
-				err = s.shipRepository.UpdateShipLocation(ctx, s, s.Location)
+				err = s.ShipRepository.UpdateShipLocation(ctx, *s, s.Location)
 				if err != nil {
 					log.Printf("%s:%s -- ERROR unable to update ships location in db: %s\n", s.Username, s.Id, err)
 					time.Sleep(60 * time.Second)
@@ -505,7 +510,7 @@ func (s Ship) Run(ctx context.Context, config Config, conn DbConn, client spacet
 				continue
 			}
 
-			if err := s.marketplaceRepository.SaveLocationMarketplaceResponses(ctx, s.Location, marketplace); err != nil {
+			if err := s.MarketplaceRepository.SaveLocationMarketplaceResponses(ctx, s.Location, marketplace); err != nil {
 				log.Printf("%s:%s -- Unable to save marketplace data: %v\n", s.Username, s.Id, err)
 				time.Sleep(60 * time.Second)
 				continue
@@ -521,6 +526,82 @@ func (s Ship) Run(ctx context.Context, config Config, conn DbConn, client spacet
 			}
 
 			time.Sleep(60 * time.Second)
+		}
+
+		if s.RoleData.Role == "FuelBalancer" {
+			// Go to location with max fuel
+			locationWithMostFuel, err := s.MarketplaceRepository.GetLocationWithMostFuelInSystem(ctx, s.RoleData.System)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to get location with most fuel in system \"%s\": %s\n", s.Username, s.Id, s.RoleData.System, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			if s.Location != locationWithMostFuel {
+				// Get fuel required to travel to the location with the most fuel
+				fuelRequiredForTravel, err := s.getAdditionalFuelRequiredForTrip(ctx, client, locationWithMostFuel)
+				if err != nil {
+					log.Printf("%s:%s -- Unable to get additional fuel required for trip to \"%s\": %s\n", s.Username, s.Id, locationWithMostFuel, err)
+					time.Sleep(60 * time.Second)
+					continue
+				}
+
+				if fuelRequiredForTravel > 0 {
+					err = s.purchaseGood(ctx, client, GoodFuel, fuelRequiredForTravel)
+					if err != nil {
+						log.Printf("%s:%s -- Unable to purchase fuel required %d to travel to %s: %s\n", s.Username, s.Id, fuelRequiredForTravel, locationWithMostFuel, err)
+						time.Sleep(60 * time.Second)
+						continue
+					}
+				}
+
+				err = s.moveToLocation(ctx, client, locationWithMostFuel)
+				if err != nil {
+					log.Printf("%s:%s -- Unable to travel to location with most fuel \"%s\": %s\n", s.Username, s.Id, locationWithMostFuel, err)
+				}
+			}
+
+			// Purchase max fuel from current location
+			locationFuel, err := s.MarketplaceRepository.GetLocationGoodQuantity(ctx, s.Location, GoodFuel)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to get current quantity of \"%s\" at location \"%s\": %s\n", s.Username, s.Id, GoodFuel, s.Location, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			fuelToPurchase := s.SpaceAvailable
+			if locationFuel < s.SpaceAvailable {
+				fuelToPurchase = locationFuel
+			}
+
+			err = s.purchaseGood(ctx, client, GoodFuel, fuelToPurchase)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to purchase %d quantity of good \"%s\" from location \"%s\": %s\n", s.Username, s.Id, fuelToPurchase, GoodFuel, s.Location, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			// Move to the location with the least amount of fuel
+			locationWithLeastFuel, err := s.MarketplaceRepository.GetLocationWithLeastFuelInSystem(ctx, s.RoleData.System)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to get location with least fuel in system \"%s\": %s\n", s.Username, s.Id, s.RoleData.System, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			err = s.moveToLocation(ctx, client, locationWithLeastFuel)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to move to location with least fuel: %s\n", s.Username, s.Id, err)
+				time.Sleep(60 * time.Second)
+				continue
+			}
+
+			err = s.emptyCargo(ctx, client)
+			if err != nil {
+				log.Printf("%s:%s -- Unable to empty cargo at location with least fuel: %s\n", s.Username, s.Id, err)
+				time.Sleep(60*time.Second)
+				continue
+			}
 		}
 	}
 }

@@ -104,3 +104,20 @@ func (s *Server) GetUserShips(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
 	}
 }
+
+func (s *Server) GetUserShipTransactions(w http.ResponseWriter, r *http.Request) {
+	userId := chi.URLParam(r, "userId")
+	shipId := chi.URLParam(r, "shipId")
+	userShipTransactions, err := s.shipRepository.GetUserShipTransactions(r.Context(), userId, shipId)
+	log.Printf("User Ship Transactions: %+v\n", userShipTransactions)
+	if err != nil {
+		log.Printf("unable to get user ship transactions: %s\n", err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	}
+
+	err = json.NewEncoder(w).Encode(userShipTransactions)
+	if err != nil {
+		log.Printf("unable to encode user ship transactions: %s\n", err)
+		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	}
+}

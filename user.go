@@ -169,11 +169,11 @@ func (ui UserInitializer) InitializeUser(ctx context.Context, client spacetrader
 			MaxCargo:              apiShip.MaxCargo,
 			SpaceAvailable:        apiShip.SpaceAvailable,
 			RoleData:              roleData,
-			shipRepository:        ui.ShipRepository,
-			flightPlanRepository:  ui.FlightPlanRepository,
-			routeRepository:       ui.RouteRepository,
-			marketplaceRepository: ui.MarketplaceRepository,
-			transactionRepository: ui.TransactionRepository,
+			ShipRepository:        ui.ShipRepository,
+			FlightPlanRepository:  ui.FlightPlanRepository,
+			RouteRepository:       ui.RouteRepository,
+			MarketplaceRepository: ui.MarketplaceRepository,
+			TransactionRepository: ui.TransactionRepository,
 		}
 
 		for _, cargo := range apiShip.Cargo {

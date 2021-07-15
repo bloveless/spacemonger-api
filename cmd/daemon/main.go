@@ -58,12 +58,12 @@ func NewApp() App {
 	}
 }
 
-func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User, systemLocations spacetraders.GetSystemLocationsResponse, shipMessages chan spacemonger.ShipMessage, ships chan spacemonger.Ship) error {
+func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User, systemLocations spacetraders.GetSystemLocationsResponse, system, shipType string, shipMessages chan spacemonger.ShipMessage, ships chan spacemonger.Ship) error {
 	// TODO: THERE ARE A LOT OF THINGS WRONG WITH THIS FUNCTION... IT WAS DONE HASTILY AND JUST COPIED AND PASTED...
 	// FIXME!!!!
-	newShip, newCredits, err := spacemonger.PurchaseShip(ctx, *user, "OE", "JW-MK-I")
+	newShip, newCredits, err := spacemonger.PurchaseShip(ctx, *user, system, shipType)
 	if err != nil {
-		return fmt.Errorf("unable to purchase ship type \"%s\" in \"%s\": %w", "JW-MK-I", "OE", err)
+		return fmt.Errorf("unable to purchase ship type \"%s\" in \"%s\": %w", shipType, system, err)
 	}
 
 	user.Credits = newCredits
@@ -77,8 +77,8 @@ func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User,
 
 	// The users first ship will be a trader...
 	// TODO: The System "OE" shouldn't be hard coded here
-	roleData := spacemonger.RoleData{Role: "Trader", System: "OE"}
-	if len(user.Ships) > 0 {
+	roleData := spacemonger.RoleData{Role: "Trader", System: system}
+	if shipType != "TD-MK-I" && len(user.Ships) > 0 {
 		// After that we will assign each new Scout to an unassigned location
 		roleData.Role = "Scout"
 		foundScoutLocation := false
@@ -95,8 +95,7 @@ func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User,
 
 			if !foundAssignedScout {
 				roleData.Location = l.Symbol
-				// TODO: The system shouldn't be hard coded here
-				roleData.System = "OE"
+				roleData.System = system
 				foundScoutLocation = true
 
 				log.Printf("%s -- Assigning new scout %s to location %s\n", user.Username, newShip.Id, l.Symbol)
@@ -108,11 +107,17 @@ func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User,
 		if !foundScoutLocation {
 			// If we were unable to find a scout location assume that every location has a scout assigned and that this ship should be a trader
 			roleData.Role = "Trader"
-			roleData.System = "OE"
+			roleData.System = system
 			roleData.Location = ""
 
 			log.Printf("%s:%s -- Unable to find location to assign scout to. Assigning ship as a trader\n", user.Username, newShip.Id)
 		}
+	}
+
+	if shipType == "TD-MK-I" {
+		roleData.Role = "FuelBalancer"
+		roleData.System = system
+		roleData.Location = ""
 	}
 
 	// TODO: It is possible that the container exits after buying a ship but before the ship is assigned a role and saved to the DB
@@ -120,18 +125,23 @@ func purchaseAndAssignShip(ctx context.Context, app App, user *spacemonger.User,
 	//       as above in the InitializeUser method
 
 	s := spacemonger.Ship{
-		Username:       user.Username,
-		UserId:         user.Id,
-		Id:             newShip.Id,
-		Type:           newShip.Type,
-		Location:       newShip.Location,
-		LoadingSpeed:   newShip.LoadingSpeed,
-		Speed:          newShip.Speed,
-		MaxCargo:       newShip.MaxCargo,
-		Cargo:          newCargo,
-		SpaceAvailable: newShip.SpaceAvailable,
-		RoleData:       roleData,
-		Messages:       shipMessages,
+		Username:              user.Username,
+		UserId:                user.Id,
+		Id:                    newShip.Id,
+		Type:                  newShip.Type,
+		Location:              newShip.Location,
+		LoadingSpeed:          newShip.LoadingSpeed,
+		Speed:                 newShip.Speed,
+		MaxCargo:              newShip.MaxCargo,
+		Cargo:                 newCargo,
+		SpaceAvailable:        newShip.SpaceAvailable,
+		RoleData:              roleData,
+		Messages:              shipMessages,
+		ShipRepository:        app.shipRepository,
+		FlightPlanRepository:  app.flightPlanRepository,
+		RouteRepository:       app.routeRepository,
+		MarketplaceRepository: app.marketplaceRepository,
+		TransactionRepository: app.transactionRepository,
 	}
 
 	err = app.shipRepository.SaveShip(ctx, *user, spacemonger.DbShip{
@@ -279,7 +289,7 @@ func main() {
 			ship := ship
 			go func() {
 				log.Printf("%s:%s -- Starting process for ship\n", ship.Username, ship.Id)
-				ship.Run(ctx, app.config, app.dbPool, user.Client)
+				ship.Run(ctx, app.config, user.Client)
 			}()
 		}
 	}()
@@ -303,7 +313,7 @@ func main() {
 				for user.Credits > 50_000 && len(user.Ships) < 20 {
 					// TODO: It seems like the user credits aren't accurate here... probably due to the gross
 					//       purchaseAndAssignShip function here
-					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, shipMessages, ships)
+					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, "OE", "JW-MK-I", shipMessages, ships)
 					if err != nil {
 						log.Printf("%s -- ERROR unable to initially purchase and assign ships: %s\n", user.Username, err)
 					}
@@ -314,9 +324,23 @@ func main() {
 				// Next the user needs to process any rules that need processing.
 				// I.E. If the user has > 50k credits then buy as many cheap ships for probes as possible
 				if user.Credits > 50_000 && len(user.Ships) < 20 {
-					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, shipMessages, ships)
+					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, "OE", "JW-MK-I", shipMessages, ships)
 					if err != nil {
 						log.Printf("%s -- ERROR unable to initially purchase and assign ships: %s\n", user.Username, err)
+					}
+				}
+
+				hasFuelHauler := false
+				for _, s := range user.Ships {
+					if s.Type == "TD-MK-I" {
+						hasFuelHauler = true
+					}
+				}
+
+				if user.Credits > 2_000_000 && !hasFuelHauler {
+					err := purchaseAndAssignShip(ctx, app, &user, systemLocations, "OE", "TD-MK-I", shipMessages, ships)
+					if err != nil {
+						log.Printf("%s -- ERROR unable to buy fuel hauler %s\n", user.Username, err)
 					}
 				}
 

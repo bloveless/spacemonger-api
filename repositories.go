@@ -214,6 +214,7 @@ type ShipRepository interface {
 	GetShip(ctx context.Context, shipId string) (DbShip, error)
 	SaveShip(ctx context.Context, user User, ship DbShip) error
 	GetUserShips(ctx context.Context, userId string) ([]DbShip, error)
+	GetUserShipTransactions(ctx context.Context, userId string, shipId string) ([]DbTransaction, error)
 	UpdateShipLocation(ctx context.Context, s Ship, location string) error
 }
 
@@ -382,6 +383,56 @@ func (r PostgresShipRepository) GetUserShips(ctx context.Context, userId string)
 	}
 
 	return ships, nil
+}
+
+func (r PostgresShipRepository) GetUserShipTransactions(ctx context.Context, userId string, shipId string) ([]DbTransaction, error) {
+	rows, err := r.Conn.Query(ctx, `
+        SELECT
+             user_id::text
+            ,ship_id
+            ,type
+            ,good
+            ,price_per_unit
+            ,quantity
+            ,total
+            ,location
+            ,created_at
+        FROM daemon_user_transaction dut
+        WHERE dut.user_id = $1::uuid
+            AND dut.ship_id = $2
+        ORDER BY created_at DESC;
+		`,
+		userId,
+		shipId,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var transactions []DbTransaction
+	for rows.Next() {
+		t := DbTransaction{}
+
+		err = rows.Scan(
+			&t.UserId,
+			&t.ShipId,
+			&t.Type,
+			&t.Good,
+			&t.PricePerUnit,
+			&t.Quantity,
+			&t.Total,
+			&t.Location,
+			&t.CreatedAt,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		transactions = append(transactions, t)
+	}
+
+	return transactions, nil
 }
 
 func (r PostgresShipRepository) UpdateShipLocation(ctx context.Context, s Ship, location string) error {
@@ -641,6 +692,9 @@ func (r PostgresFlightPlanRepository) GetFuelRequired(ctx context.Context, origi
 
 type MarketplaceRepository interface {
 	SaveLocationMarketplaceResponses(ctx context.Context, location string, marketplaceData spacetraders.GetLocationMarketplaceResponse) error
+	GetLocationGoodQuantity(ctx context.Context, location string, good string) (int, error)
+	GetLocationWithMostFuelInSystem(ctx context.Context, system string) (string, error)
+	GetLocationWithLeastFuelInSystem(ctx context.Context, system string) (string, error)
 }
 
 type PostgresMarketplaceRepository struct {
@@ -696,6 +750,66 @@ func (r PostgresMarketplaceRepository) SaveLocationMarketplaceResponses(ctx cont
 
 	return nil
 }
+
+func (r PostgresMarketplaceRepository) GetLocationGoodQuantity(ctx context.Context, location string, good string) (int, error) {
+	quantityAvailable := 0
+
+	err := r.Conn.QueryRow(ctx, `
+		SELECT quantity_available FROM daemon_marketplace_latest
+		WHERE good = $1
+			AND location = $2
+		LIMIT 1
+		`,
+		good,
+		location,
+	).Scan(&quantityAvailable)
+	if err != nil {
+		return 0, err
+	}
+
+	return quantityAvailable, nil
+}
+
+func (r PostgresMarketplaceRepository) GetLocationWithMostFuelInSystem(ctx context.Context, system string) (string, error) {
+	location := ""
+
+	err := r.Conn.QueryRow(ctx, `
+		SELECT dml.location FROM daemon_marketplace_latest dml
+		INNER JOIN daemon_location dl ON dml.location = dl.location
+		WHERE good = 'FUEL'
+			AND dl.system = $1
+		ORDER BY quantity_available DESC
+		LIMIT 1
+		`,
+		system,
+	).Scan(&location)
+	if err != nil {
+		return "", err
+	}
+
+	return location, nil
+}
+
+func (r PostgresMarketplaceRepository) GetLocationWithLeastFuelInSystem(ctx context.Context, system string) (string, error) {
+	location := ""
+
+	err := r.Conn.QueryRow(ctx, `
+		SELECT dml.location FROM daemon_marketplace_latest dml
+		INNER JOIN daemon_location dl ON dml.location = dl.location
+		WHERE good = 'FUEL'
+			AND dl.system = $1
+		ORDER BY quantity_available ASC
+		LIMIT 1
+		`,
+		system,
+	).Scan(&location)
+	if err != nil {
+		return "", err
+	}
+
+	return location, nil
+}
+
 
 type RouteRepository interface {
 	GetRoutes(ctx context.Context, origin string) ([]DbRoute, error)

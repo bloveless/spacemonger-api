@@ -97,12 +97,13 @@ type DbRoute struct {
 }
 
 type DbTransaction struct {
-	UserId       string
-	ShipId       string
-	Type         string
-	Good         string
-	PricePerUnit int
-	Quantity     int
-	Total        int
-	Location     string
+	UserId       string    `json:"user_id"`
+	ShipId       string    `json:"ship_id"`
+	Type         string    `json:"type"`
+	Good         string    `json:"good"`
+	PricePerUnit int       `json:"price_per_unit"`
+	Quantity     int       `json:"quantity"`
+	Total        int       `json:"total"`
+	Location     string    `json:"location"`
+	CreatedAt    time.Time `json:"created_at"`
 }

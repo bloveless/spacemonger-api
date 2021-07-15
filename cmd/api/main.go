@@ -57,7 +57,7 @@ func main() {
 			// Users ships
 			r.Get("/{userId}/ships", s.GetUserShips)
 			// Users ship transactions
-			r.Get("/{userId}/ships/{shipId}/transactions", s.Index)
+			r.Get("/{userId}/ships/{shipId}/transactions", s.GetUserShipTransactions)
 		})
 
 		// market data

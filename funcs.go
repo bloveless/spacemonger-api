@@ -143,8 +143,8 @@ func PurchaseShip(ctx context.Context, u User, system string, shipType string) (
 			}
 
 			// TODO: Handle restricted goods better. Right now I just ignore any ships that are restricted
-			//       to specific goods
-			if len(availableShip.RestrictedGoods) > 0 {
+			//       to specific goods... unless we are requesting a Tiddalik
+			if shipType != "TD-MK-I" && len(availableShip.RestrictedGoods) > 0 {
 				continue
 			}
 
