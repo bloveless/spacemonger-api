@@ -558,8 +558,8 @@ func (s *Ship) Run(ctx context.Context, config Config, client spacetraders.Autho
 				continue
 			}
 
-			if locationWithMostFuelQuantity - locationWithLeastFuelQuantity < 3000 {
-				log.Printf("%s:%s -- Location with most fuel quantity %d is less than 3000 greater than location with least fuel %d. Will check again in six minutes", s.Username, s.Id, locationWithMostFuelQuantity, locationWithLeastFuelQuantity)
+			if locationWithLeastFuelQuantity > 3000 {
+				log.Printf("%s:%s -- Location \"%s\" with the least fuel has more than 3000 (%d). Will check again in six minutes", s.Username, s.Id, locationWithLeastFuel, locationWithLeastFuelQuantity)
 				time.Sleep(6 * time.Minute)
 				continue
 			}
