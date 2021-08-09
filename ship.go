@@ -327,6 +327,21 @@ func (s *Ship) moveToLocation(ctx context.Context, client spacetraders.Authorize
 	return nil
 }
 
+func (s *Ship) reloadCargo(ctx context.Context, client spacetraders.AuthorizedClient) error {
+	shipResponse, err := client.GetMyShip(ctx, s.Id)
+	if err != nil {
+		return err
+	}
+
+	var newCargo []Cargo
+	for _, c := range shipResponse.Ship.Cargo {
+		newCargo = append(newCargo, Cargo(c))
+	}
+
+	s.Cargo = newCargo
+	return nil
+}
+
 func (s *Ship) getBestTradingRoute(ctx context.Context) (Route, error) {
 	log.Printf("Getting routes for ship from location \"%s\"\n", s.Location)
 	dbRoutes, err := s.RouteRepository.GetRoutes(ctx, s.Location)
@@ -410,7 +425,11 @@ func (s *Ship) Run(ctx context.Context, config Config, client spacetraders.Autho
 
 	err = s.emptyCargo(ctx, client)
 	if err != nil {
-		log.Printf("%s:%s -- Unable to empty cargo during pre-flight check... continuing anyway: %s", s.Username, s.Id, err)
+		log.Printf("%s:%s -- Unable to empty cargo during pre-flight check... reloading cargo and continuing: %s", s.Username, s.Id, err)
+		err = s.reloadCargo(ctx, client)
+		if err != nil {
+			log.Printf("%s:%s -- Unable to reload ships cargo during pre-flight check: %s", s.Username, s.Id, err)
+		}
 	}
 
 	for {
@@ -436,7 +455,11 @@ func (s *Ship) Run(ctx context.Context, config Config, client spacetraders.Autho
 			}
 
 			if err := s.emptyCargo(ctx, client); err != nil {
-				log.Printf("%s:%s -- ERROR unable to empty cargo: %s\n", s.Username, s.Id, err)
+				log.Printf("%s:%s -- ERROR unable to empty cargo: %s. Reloading cargo and continuing\n", s.Username, s.Id, err)
+				err = s.reloadCargo(ctx, client)
+				if err != nil {
+					log.Printf("%s:%s -- ERROR unable to reload cargo: %s\n", s.Username, s.Id, err)
+				}
 				time.Sleep(60 * time.Second)
 				continue
 			}
